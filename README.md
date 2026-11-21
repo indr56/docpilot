@@ -20,7 +20,7 @@ make up            # → UI on http://localhost:9700 · API docs on http://local
 
 ![Chat with citations](docs/screenshots/chat.png)
 
-More screenshots: [documents and insights](docs/screenshots/documents.png) · [comparison](docs/screenshots/compare.png) · [monitoring](docs/screenshots/monitoring.png)
+More screenshots: [the agent, with its approval step](docs/screenshots/agent.png) (offline demo mode) · [documents and insights](docs/screenshots/documents.png) · [comparison](docs/screenshots/compare.png) · [monitoring](docs/screenshots/monitoring.png)
 
 ---
 
@@ -142,7 +142,7 @@ make dev-ui       # terminal 3 (optional): UI dev server on :5173 with hot reloa
 | | **Duplicate detection** (same content returns the existing document, so nobody pays twice) | `services/documents.py` |
 | | **Batch upload** with per-file errors | `POST /documents/batch` |
 | | **Real-time status** over WebSocket (Redis pub/sub) | `/api/v1/events` |
-| | Simple **web UI** (React + TypeScript): documents (drag-and-drop or file picker), insights, chat with clickable citations, compare, monitoring | `frontend/` |
+| | Simple **web UI** (React + TypeScript): documents (drag-and-drop or file picker), insights, chat with clickable citations that **open the original file at the cited page**, an **Agent** page (live step timeline by agent, approve / reject, recent runs, saved reports and tasks), compare, monitoring, and a light / dark / system theme switch | `frontend/` |
 | **Production** | **Cost tracking**: every model call stored with tokens, latency, USD | `services/usage.py` |
 | | **Rate limiting** and a **daily token quota** per user, across all of that user's API keys | `core/rate_limit.py` |
 | | **Body-size limits** checked before authentication or parsing (`413` before an oversized upload is read) | `core/body_limit.py` |

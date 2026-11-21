@@ -51,7 +51,8 @@ def route(messages: list[Message]) -> RouteDecision:
     goal = text.split("<request>", 1)[-1].split("</request>", 1)[0].strip().lower()
     for pattern, name, confidence in _ROUTE_RULES:
         if re.search(pattern, goal):
-            return RouteDecision(route=name, confidence=confidence, reason=f"matched '{pattern[:30]}'")  # type: ignore[arg-type]
+            reason = f"the wording asks for {name.replace('_', ' ')}"
+            return RouteDecision(route=name, confidence=confidence, reason=reason)  # type: ignore[arg-type]
     return RouteDecision(route="unsure", confidence=0.3, reason="no rule matched")
 
 
@@ -119,8 +120,12 @@ def decide(messages: list[Message]) -> AgentDecision:
     system, goal = messages[0]["content"], messages[1]["content"]
     agent = re.search(r"^Agent: (\w+)", system, re.M).group(1)  # type: ignore[union-attr]
     route_name = re.search(r"^Route: (\w+)", system, re.M).group(1)  # type: ignore[union-attr]
-    documents = re.findall(r"^- ([0-9a-f-]{36}) \| ", system, re.M)
-    first_doc = documents[0] if documents else ""
+    listed = re.findall(r"^- ([0-9a-f-]{36}) \| (.*)$", system, re.M)
+    documents = [doc_id for doc_id, _ in listed]
+    # Like a real model reading the titles: the document whose title shares the most words with the goal.
+    goal_words = set(re.findall(r"[a-z0-9]{4,}", goal.lower()))
+    best = max(listed, key=lambda d: len(goal_words & set(re.findall(r"[a-z0-9]{4,}", d[1].lower()))), default=None)
+    first_doc = best[0] if best else ""
     observations = _observations(messages)
 
     if agent == "supervisor":

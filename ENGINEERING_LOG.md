@@ -2,6 +2,31 @@
 
 One entry per phase: what changed, the decisions behind it, and how it was checked. Newest first.
 
+## Phase 2: the agent in the UI (22 Nov 2026)
+
+**What:** an **Agent** page and a few app-wide touches. No backend API changes were needed: the
+page uses the endpoints from 1a-1b.
+
+**Added**
+
+- `frontend/src/pages/AgentPage.tsx`: a goal box with one example per route; an optional document
+  picker; the run streamed over SSE as a timeline, each step tagged with its agent (router,
+  supervisor, research, actions) and tool; an approval card showing the preview and the exact
+  arguments, with Approve / Reject; the answer with clickable citations; recent runs; and the
+  reports and tasks the agent saved.
+- Citations (agent and chat) open the **original file at the cited page** (`#page=N` on a blob URL,
+  because the file endpoint needs the API-key header). The tab opens before the fetch, so pop-up
+  blockers allow it.
+- A light / dark / system theme switch: the existing dark palette now also applies under
+  `data-theme="dark"`, and the choice is kept per browser.
+- The fake provider now picks the document whose title best matches the goal (as a model reading
+  the titles would), so offline demos of "list every ... in the agreement" read the right document.
+
+**Verified:** the production build (`tsc -b && vite build`) passes; the page was driven in a real
+browser against the API and a worker in fake-AI mode: an action run paused for approval, was
+approved, and saved a task; a list run cited every item; no console errors. Screenshot:
+`docs/screenshots/agent.png`. 198 backend tests still pass.
+
 ## Phase 1c: the MCP server (22 Nov 2026)
 
 **What:** DocPilot's tools as an MCP server at `/mcp/`, for Claude, Cursor and other clients.

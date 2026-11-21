@@ -69,6 +69,24 @@ export async function download(path: string, filename: string): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+/** Opens a document's original file in a new tab, at a page when given. PDF viewers honour #page=N.
+ * The tab is opened first (synchronously, so pop-up blockers allow it), then pointed at the file. */
+export async function openFile(documentId: string, page?: number | null): Promise<void> {
+  const tab = window.open("", "_blank");
+  try {
+    const response = await fetch(`${API}/documents/${documentId}/file`, { headers: { "X-API-Key": getApiKey() } });
+    if (!response.ok) await parse(response);
+    const url = URL.createObjectURL(await response.blob());
+    const target = page ? `${url}#page=${page}` : url;
+    if (tab) tab.location.href = target;
+    else window.open(target, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (error) {
+    tab?.close();
+    throw error;
+  }
+}
+
 export const post = <T,>(path: string, body?: unknown) =>
   api<T>(path, { method: "POST", body: body instanceof FormData ? body : JSON.stringify(body ?? {}) });
 

@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Empty, ErrorNote } from "../components/ui";
-import { api, listAll, post, postStream, timeAgo } from "../lib/api";
+import { api, listAll, openFile, post, postStream, timeAgo } from "../lib/api";
 import { answerPieces } from "../lib/format";
 import type { ChatSession, Citation, DocumentItem, Message, AppEvent } from "../lib/types";
 
@@ -422,7 +422,19 @@ function SourceCard({ c, active, onClick }: { c: Citation; active: boolean; onCl
         <strong>
           [{c.number}] {c.document_title}
         </strong>
-        <span className="muted small">{c.page_number ? `page ${c.page_number}` : "no pages in this file type"}</span>
+        <span className="row">
+          <span className="muted small">{c.page_number ? `page ${c.page_number}` : "no pages in this file type"}</span>
+          <button
+            className="btn sm ghost"
+            title="Open the original file at this page"
+            onClick={(e) => {
+              e.stopPropagation();
+              void openFile(c.document_id, c.page_number).catch(() => undefined);
+            }}
+          >
+            Open ↗
+          </button>
+        </span>
       </div>
       {active && <div className="muted" style={{ marginTop: 4 }}>{c.snippet}</div>}
     </div>

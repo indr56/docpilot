@@ -45,7 +45,7 @@ export function ErrorNote({ error }: { error: unknown }) {
   return <div className="alert">{error instanceof Error ? error.message : String(error)}</div>;
 }
 
-export function Icon({ name }: { name: "docs" | "chat" | "compare" | "chart" }) {
+export function Icon({ name }: { name: "docs" | "chat" | "compare" | "chart" | "agent" }) {
   const paths: Record<string, ReactNode> = {
     docs: (
       <>
@@ -61,6 +61,12 @@ export function Icon({ name }: { name: "docs" | "chat" | "compare" | "chart" }) 
       </>
     ),
     chart: <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />,
+    agent: (
+      <>
+        <rect x="5" y="8" width="14" height="11" rx="3" />
+        <path d="M12 4v4M9 13h.01M15 13h.01M9.5 16h5" />
+      </>
+    ),
   };
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

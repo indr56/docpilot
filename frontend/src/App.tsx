@@ -3,16 +3,19 @@ import { Icon } from "./components/ui";
 import { getApiKey, listAll, setApiKey } from "./lib/api";
 import { useAppEvents } from "./lib/events";
 import type { DocumentItem, AppEvent } from "./lib/types";
+import AgentPage from "./pages/AgentPage";
 import ChatPage from "./pages/ChatPage";
 import ComparePage from "./pages/ComparePage";
 import DocumentsPage from "./pages/DocumentsPage";
 import MetricsPage from "./pages/MetricsPage";
 
-type Page = "documents" | "chat" | "compare" | "metrics";
+type Page = "documents" | "chat" | "agent" | "compare" | "metrics";
+type Theme = "system" | "light" | "dark";
 
-const NAV: { id: Page; label: string; icon: "docs" | "chat" | "compare" | "chart" }[] = [
+const NAV: { id: Page; label: string; icon: "docs" | "chat" | "compare" | "chart" | "agent" }[] = [
   { id: "documents", label: "Documents", icon: "docs" },
   { id: "chat", label: "Chat", icon: "chat" },
+  { id: "agent", label: "Agent", icon: "agent" },
   { id: "compare", label: "Compare", icon: "compare" },
   { id: "metrics", label: "Monitoring", icon: "chart" },
 ];
@@ -27,6 +30,23 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [chatSeed, setChatSeed] = useState<string[] | null>(null);
   const [lastEvent, setLastEvent] = useState<AppEvent | null>(null);
+  // Light / dark / follow the system. A per-browser convenience, so localStorage (guarded) is enough.
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      return (localStorage.getItem("docpilot-theme") as Theme) || "system";
+    } catch {
+      return "system";
+    }
+  });
+  useEffect(() => {
+    if (theme === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem("docpilot-theme", theme);
+    } catch {
+      /* private mode: the choice lasts for this visit */
+    }
+  }, [theme]);
 
   useEffect(() => {
     const onHash = () => {
@@ -101,6 +121,13 @@ export default function App() {
           </button>
         ))}
         <div className="sidebar-foot">
+          <div className="theme-switch" role="group" aria-label="Theme">
+            {(["system", "light", "dark"] as Theme[]).map((t) => (
+              <button key={t} className={theme === t ? "active" : ""} onClick={() => setTheme(t)}>
+                {t === "system" ? "Auto" : t[0].toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
           <span className={`live ${connected ? "on" : ""}`}>{connected ? "Live updates on" : "Connecting…"}</span>
           <button className="btn sm" onClick={changeKey}>
             API key: {getApiKey().slice(0, 10)}…
@@ -122,6 +149,7 @@ export default function App() {
         {page === "chat" && (
           <ChatPage documents={documents} seed={chatSeed} clearSeed={() => setChatSeed(null)} lastEvent={lastEvent} />
         )}
+        {page === "agent" && <AgentPage documents={documents} />}
         {page === "compare" && <ComparePage documents={documents} lastEvent={lastEvent} connected={connected} />}
         {page === "metrics" && <MetricsPage lastEvent={lastEvent} />}
       </main>

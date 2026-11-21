@@ -129,3 +129,70 @@ export interface AppEvent {
   stage?: string;
   error_message?: string;
 }
+
+// --------------------------------------------------------------------------- agent (specs/agent.md)
+export type AgentName = "router" | "supervisor" | "research" | "actions";
+
+export interface AgentStep {
+  index: number;
+  agent: AgentName;
+  kind: "route" | "handoff" | "tool_call" | "invalid_call" | "approval" | "rejected" | "final" | "error";
+  tool_name: string | null;
+  thought: string | null;
+  arguments: Record<string, unknown> | null;
+  summary: string | null;
+  ok: boolean;
+  duration_ms: number | null;
+}
+
+export interface AgentApproval {
+  id: string;
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  preview: string | null;
+  status: "pending" | "approved" | "rejected";
+  expires_at: string;
+  decided_at: string | null;
+}
+
+export interface AgentCitation {
+  number: number;
+  document_id: string;
+  document_title: string;
+  page: number | null;
+  snippet: string;
+}
+
+export interface AgentRun {
+  id: string;
+  goal: string;
+  document_ids: string[];
+  route: string | null;
+  route_reason: string | null;
+  route_confidence: number | null;
+  status: "running" | "waiting_approval" | "completed" | "failed";
+  answer: string | null;
+  citations: AgentCitation[];
+  confidence: "high" | "medium" | "low" | null;
+  tool_calls: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  cost_usd: number;
+  error_code: string | null;
+  error_message: string | null;
+  pending_approval: AgentApproval | null;
+  created_at: string | null;
+  updated_at: string | null;
+  steps: AgentStep[];
+}
+
+export interface AgentOutput {
+  id: string;
+  run_id: string | null;
+  kind: "report" | "task";
+  title: string;
+  body: string;
+  due_date: string | null;
+  document_ids: string[];
+  created_at: string;
+}
