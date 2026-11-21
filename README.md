@@ -2,7 +2,7 @@
 
 Upload documents, get AI insights, **chat with them in natural language with every answer cited down to the document and page**, and hand bigger jobs to an **agent** that picks its own tools, asks before it changes anything, and cites what it used. Think "ChatGPT for your documents", built as a production-style backend with a simple web UI. It runs as one command on a laptop and is designed for thousands of documents.
 
-**At a glance:** 175 automated tests · a 25-question RAG eval with real models scoring 100% on answers, citations (document and page) and abstention · uploads answer in 17 ms and documents are ready in about 4 s · about $0.004 to process a document and about $0.002 per answered question.
+**At a glance:** 181 automated tests · a 25-question RAG eval with real models scoring 100% on answers, citations (document and page) and abstention · uploads answer in 17 ms and documents are ready in about 4 s · about $0.004 to process a document and about $0.002 per answered question.
 
 **Design principles:**
 
@@ -75,7 +75,7 @@ Or run the whole scenario automatically:
 
 ```bash
 make smoke   # end-to-end: upload → process → insights → versioning → chat → streaming → summary → compare → metrics
-make test    # 175 tests in Docker with a fake AI provider (no API key or cost)
+make test    # 181 tests in Docker with a fake AI provider (no API key or cost)
 make eval    # RAG quality evaluation (25 questions) against the running stack
 make help    # all commands
 ```
@@ -112,7 +112,7 @@ make dev-ui       # terminal 3 (optional): UI dev server on :5173 with hot reloa
 | Document statistics API · Processing metrics API | `GET /metrics/documents` (counts, success rate, p50/p95, per-stage timings, errors, queue wait), plus `/metrics/ai-usage`, `/metrics/api`, `/metrics/system` |
 | Data storage (metadata and status, insights, conversations, messages with citations, processing metrics, performance data) | `documents`, `document_insights` + `document_summaries`, `chat_sessions`, `chat_messages` (citations + retrieval trace), `processing_runs` + `processing_stage_runs`, `request_metrics` + `ai_usage` (§5) |
 
-**Beyond the core:** multi-document chat · intelligent follow-up suggestions · summary customisation (length, focus, tone) · automated categorisation and tagging · sentiment and key-insight extraction · comparative analysis · an agent (router, tools, approvals) · a simple web UI · real-time updates over WebSocket · smart caching (embeddings and answers in Redis) · pgvector · streaming chat over SSE · 175 tests · cost tracking and optimisation · rate limiting and quotas · document version tracking · batch processing optimisations · structured logging and observability · health checks and monitoring endpoints. Where each lives:
+**Beyond the core:** multi-document chat · intelligent follow-up suggestions · summary customisation (length, focus, tone) · automated categorisation and tagging · sentiment and key-insight extraction · comparative analysis · an agent (router, tools, approvals) · a simple web UI · real-time updates over WebSocket · smart caching (embeddings and answers in Redis) · pgvector · streaming chat over SSE · 181 tests · cost tracking and optimisation · rate limiting and quotas · document version tracking · batch processing optimisations · structured logging and observability · health checks and monitoring endpoints. Where each lives:
 
 | Area | Feature | Where |
 |---|---|---|
@@ -130,7 +130,8 @@ make dev-ui       # terminal 3 (optional): UI dev server on :5173 with hot reloa
 | | **Streaming** answers (SSE) and **follow-up suggestions**, generated in parallel with the answer and checked so they don't repeat it or the chat | `/messages/stream` |
 | | Delete a conversation; a chat whose documents were all deleted says so | `DELETE /chat/sessions/{id}` |
 | **Advanced AI** | **Document comparison** (2–5 docs, e.g. policy v1 vs v2): structured differences with values, pages and impact. For versions of one document, the code computes the word-level changes and gives them to the model, so nothing changed is missed | `services/comparison.py` |
-| **Agent** | **Router** (7 routes) + **agent loop** with a tool registry, schema-checked arguments with retry, step, cost and time limits | `agent/`, `tools/` |
+| **Agent** | **Supervisor** + **Research** (read) and **Actions** (write) agents, split on permission, one run id | `agent/runner.py`, `agent/routes.py` |
+| | **Router** (7 routes) + **agent loop** with a tool registry, schema-checked arguments with retry, step, cost and time limits | `agent/`, `tools/` |
 | | **List everything**: `scan_document` maps over every section and merges deduplicated items with pages | `tools/read_tools.py` |
 | | **Approvals** for every write (save a report, create a task): idempotent, one lock per run, expiring, stored arguments only | `agent/runner.py` |
 | | Live steps over SSE; every run, step and approval stored | `/agent/runs/stream` |
@@ -300,8 +301,8 @@ erDiagram
 | `ai_usage` | Every model call: operation, model, prompt version, tokens, cost, latency, success, cached | Feeds cost metrics and quotas |
 | `request_metrics` | Method, route template, status, latency | Feeds API performance metrics |
 | `comparisons` | Document ids, focus, status, structured result | Background job state |
-| `agent_runs` | Goal, document scope, route + reason + confidence, status, answer, citations, confidence, the stored transcript, tool calls, tokens, cost, error | Resumable after an approval; `sources` maps each [n] to a passage |
-| `agent_steps` | One row per route, tool call, invalid call, approval, rejection, final answer or error: tool, arguments, short result, duration | The run's timeline |
+| `agent_runs` | Goal, document scope, route + reason + confidence, status, answer, citations, confidence, the **stack** of agent frames (each agent's transcript and tools), tool calls, tokens, cost, error | Resumable after an approval; `sources` maps each [n] to a passage, for the whole run |
+| `agent_steps` | One row per route, hand-off, tool call, invalid call, approval, rejection, final answer or error: which **agent**, tool, arguments, short result, duration | The run's timeline across agents |
 | `approvals` | Tool, exact arguments + SHA-256, status, expiry, decided at | Conditional update makes decisions idempotent |
 | `agent_outputs` | Reports and tasks saved by write tools, linked to the run and documents | Only written after approval |
 
@@ -362,6 +363,20 @@ goal ──► router (fast model, one call) ──► route + confidence      (
 
 **Two levels of decision.** The router picks a strategy once; inside the run, the loop picks tools. There is no second classifier.
 
+**Three agents, split on permission.** Reading is harmless and writing changes your data, so that is where the split is. A question (every route but `action`) goes straight to the **Research** agent, which has read tools only, so it costs no extra call. An `action` goes to a **Supervisor**, whose only tools are two hand-offs: `ask_research_agent` (reading) and `ask_actions_agent`. The **Actions** agent can only list documents, save reports and create tasks, every write needs your approval, and its prompt is stricter: use only the content you were given.
+
+```
+action goal ──► Supervisor ──ask_research_agent──► Research (read tools) ──cited findings──┐
+                    ▲                                                                        │
+                    └──────────────────────────────────────────────────────────────────────┘
+                Supervisor ──ask_actions_agent (findings + [n] citations)──► Actions ──► approval ──► saved
+                    ▲                                                                        │
+                    └──────────── "saved" or "you declined" ───────────────────────────────┘
+                Supervisor ──► final answer (what was found, what was saved)
+```
+
+A run keeps a **stack of frames**, one per working agent: a hand-off pushes the specialist, its final answer pops it and returns to the supervisor as the tool result, and an approval pauses with Actions on top. There is **one run id** for the whole tree, every step records its agent, the 8-call limit counts hand-offs, and citation numbers are per run, so a saved report cites the same [n] as the answer. Specialists have no hand-off tools, so the tree is at most two levels deep.
+
 | Route | When | Tools offered |
 |---|---|---|
 | `chat_only` | Greetings, questions about DocPilot | none |
@@ -369,12 +384,12 @@ goal ──► router (fast model, one call) ──► route + confidence      (
 | `whole_document` | Summarise or explain a document | `get_document_text` (whole text up to 12k tokens), `get_document_notes` (the section notes made at processing time, for longer ones), `get_insights` |
 | `list_everything` | "List every / all …" | `scan_document`: map over **every** section in parallel, extract matching items with pages, merge and dedupe |
 | `cross_document` | Compare documents | `compare_documents` (the comparison job), `search_passages` |
-| `action` | Save or create something | all read tools + `save_report`, `create_task` (both need approval) |
+| `action` | Save or create something | the **Supervisor**: hands reading to Research (all read tools) and saving to Actions (`save_report`, `create_task`, both need approval) |
 | `unsure` | The router isn't confident | `search_passages`, `get_document_text`, `get_document_notes` |
 
 **Approvals are safe to retry.** The decision is a conditional update (`WHERE status = 'pending'`), so approving twice saves once; a Redis lock per run stops two resumes at the same time (`409 run_busy`); approvals expire after 24 hours; and on approve the **stored** arguments run, exactly what you were shown, never new ones from the request.
 
-**Why write it by hand (no agent framework).** The loop itself is about 115 lines (`agent/runner.py`, with approvals and the run lifecycle around it): one structured-output call per step, a tool registry with Pydantic schemas, and a run table that stores the transcript so a paused run can resume. That keeps every step visible in `agent_steps`, testable offline with the fake provider (22 tests), and costed per call in `ai_usage`, the same way as the rest of the system.
+**Why write it by hand (no agent framework).** The loop itself is about 115 lines (`agent/runner.py`, with approvals and the run lifecycle around it): one structured-output call per step, a tool registry with Pydantic schemas, and a run table that stores the transcript so a paused run can resume. That keeps every step visible in `agent_steps`, testable offline with the fake provider (28 tests), and costed per call in `ai_usage`, the same way as the rest of the system.
 
 **Prompt injection.** Tool results go back inside `<tool_result>` tags and the prompt says their text is data. More importantly, the worst an injected instruction can do is *propose* a write, which then waits for the user. A test covers exactly that.
 
@@ -510,7 +525,7 @@ The growth path beyond that (roughly 100k+ documents or many concurrent users), 
 
 | Command | What | Cost |
 |---|---|---|
-| `make test` | 175 tests:<br/>• Units: parsing (incl. edge-case files), validation, chunking, RRF fusion, citation mapping, the quoted-figure check, cost, the cache guard, the version change list<br/>• API integration on real Postgres + Redis: upload, duplicates, validation, failures, batch, versioning, download, summaries, reprocess, chat with citations, abstention, multi-turn, caches, SSE, follow-up checks, comparison, metrics, rate limits, body limits, job recovery, documented error responses<br/>• Agent (22): every route, invalid arguments then a retry, step / cost limits, tool scope, injected writes stay proposals, approve / reject / approve twice / expired / busy / another user, the SSE event order | Free (fake AI) |
+| `make test` | 181 tests:<br/>• Units: parsing (incl. edge-case files), validation, chunking, RRF fusion, citation mapping, the quoted-figure check, cost, the cache guard, the version change list<br/>• API integration on real Postgres + Redis: upload, duplicates, validation, failures, batch, versioning, download, summaries, reprocess, chat with citations, abstention, multi-turn, caches, SSE, follow-up checks, comparison, metrics, rate limits, body limits, job recovery, documented error responses<br/>• Agent (28): every route, the supervisor's hand-offs and each agent's tool limits, invalid arguments then a retry, step / cost limits, tool scope, injected writes stay proposals, approve / reject / approve twice / expired / busy / another user, the SSE event order | Free (fake AI) |
 | `make lint` | ruff + mypy, all passing | — |
 | `make smoke` | The full user journey against the real stack and model, with readable output | ≈ $0.03 |
 | `make eval` | 25 labelled questions over the samples:<br/>• answer accuracy<br/>• citation document and page accuracy<br/>• abstention accuracy (incl. off-topic and prompt injection)<br/>• multi-document questions and arithmetic over cited figures, including after earlier questions in the same chat<br/>• wrong amounts stated next to correct working<br/>• false-abstention rate<br/>• citation marks that lead nowhere<br/>• follow-ups that repeat the answer<br/>• latency and cost | ≈ $0.05 |
@@ -539,8 +554,8 @@ backend/
       v1/           documents · chat (+SSE) · comparisons · agent (+SSE) · metrics · events (WebSocket)
     services/       business logic: documents, processing pipeline, parsing, chunking, retrieval,
                     chat (RAG), insights, comparison, metrics, cache, usage (cost), storage, events
-    agent/          router, route → tools table, the loop, approvals and run lifecycle (runner.py)
-    tools/          tool registry + read tools (search, full text, notes, insights, scan, compare) + write tools
+    agent/          router, route → agent and tools, the loop with a stack of agent frames, approvals (runner.py)
+    tools/          tool registry + read tools (search, full text, notes, insights, scan, compare) + write tools + hand-offs
     llm/            provider interface + OpenAI + fake provider (+ fake_agent); prompts/ (one versioned file per prompt)
     models/         SQLAlchemy tables          schemas/  Pydantic API models
     workers/        Celery app + thin task wrappers

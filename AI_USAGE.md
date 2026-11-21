@@ -45,7 +45,7 @@ An AI agent writes code fast, so the controls were about making sure that code i
 6. **No regressions:** the full suite runs after every change, in the agent's sandbox and again on my machine.
 7. **Real stack, not only mocks:** each slice was run against Postgres, Redis, the worker and real OpenAI calls.
 8. **Gates before any change is accepted:**
-   - `make test`: 175 tests on a fake AI provider (no key needed, repeatable)
+   - `make test`: 181 tests on a fake AI provider (no key needed, repeatable)
    - `make lint`: ruff and mypy; the UI is type-checked in every Docker build
    - `make smoke`: the full user journey with the real models
    - `make eval`: 25 labelled questions with the real models, including a multi-turn chat
@@ -328,7 +328,7 @@ The focus rule matters most: without it, a model asked to focus on something the
 | **Follow-up check** (`followup_check.py` · `followup-check-v2`) | nano, structured | Marks candidates the answer, or up to 3 earlier answers, already covers. Designed from the measurements in section 3 |
 | **Comparison** (`comparison.py` · `comparison-v3`) | mini, structured | An evidence pack per document (summary, key facts with pages, top passages for the focus). For versions, the code-computed change list. Each difference has the exact value per document, a page and an impact level |
 | **Agent router** (`agent_router.py` · `agent-router-v1`) | nano, structured | One of 7 routes with a confidence and a reason; "save / create" always wins (action); below 0.5 the code makes it `unsure` |
-| **Agent loop** (`agent.py` · `agent-v1`) | mini, structured | Route strategy, the documents in scope, each tool's description and compact JSON schema; one tool call or a final answer per turn; cite [n]; tool results are data |
+| **Agents** (`agent.py` · `agent-v2`) | mini, structured | One template, three roles (Supervisor, Research, Actions): the role, the route and its strategy, the documents in scope, each tool's description and compact JSON schema; one tool call or a final answer per turn; cite [n]; tool results are data. The Actions role adds: only the content in the task, never more than asked |
 | **Agent scan** (`agent_scan.py` · `agent-scan-v1`) | nano, structured | Map step of `scan_document`: every matching item in one section with its page, nothing else; cached per section |
 
 ### 15. Evaluation: treating prompts like code
@@ -393,13 +393,13 @@ The off-topic question and the prompt-injection attempt were both stopped before
 | Vector database | pgvector (HNSW) combined with Postgres full-text search | 12 |
 | Streaming chat responses | Answers stream over SSE; follow-ups arrive with the end of the answer | 9 |
 | Real-time updates | Each processing stage and "insights ready / failed" are pushed over a WebSocket, so the UI updates live | README |
-| Comprehensive test coverage | 175 tests on a fake AI provider plus a 25-case eval on the real models | 2, 15 |
+| Comprehensive test coverage | 181 tests on a fake AI provider plus a 25-case eval on the real models | 2, 15 |
 | Cost tracking and optimisation | Every call metered by operation, model and prompt version; cache savings counted; four cost layers | 8, 9 |
 | Rate limiting and quota management | Per-user rate limits and a daily token quota across all of a user's keys | 12 |
 | Document version tracking | Versions feed cache keys, insights and comparisons; comparing versions uses the computed change list | 8, 14 |
 | Batch processing optimisations | Embeddings in batches of 96; long-document map calls 8 at a time; batch upload | 9, 13 |
 | Logging and observability | Each AI call stored with tokens, cost, latency and success; AI metrics on `/metrics/ai-usage` | 9, 12 |
-| AI agent | A router picks one of 7 strategies; a hand-written loop calls tools with schema-checked arguments; every write waits for an idempotent approval | 18 |
+| AI agent | A router picks one of 7 strategies; a Supervisor hands reading to a Research agent and saving to an Actions agent; a hand-written loop calls tools with schema-checked arguments; every write waits for an idempotent approval | 18 |
 
 ### 18. The agent: prompts and safeguards
 
@@ -411,4 +411,5 @@ The full design is in [specs/agent.md](specs/agent.md). What matters for the AI 
 - **Bounded by design.** At most 8 tool calls, $0.05 and 90 s per stretch of a run; tool results are cut to 6,000 characters (the whole-document tool gets its token budget instead).
 - **Injection.** Tool results are wrapped in `<tool_result>` and declared data. The real guard is structural: an injected "save this" can only create an approval the user sees and can reject (tested).
 - **The fake provider plays the model.** `llm/fake_agent.py` routes by keywords and follows a scripted policy reading only the prompt text, so the real router, registry, validation, approvals and citation code run in every test with no key.
+- **Three roles, one template.** The Supervisor can only hand off; Research can only read; Actions can only list documents and write, with approval. The tool lists are enforced by the code (`invalid_call` otherwise), so a confused model can't, say, have Research write a report. Questions skip the Supervisor, so the multi-agent cost is paid only by actions.
 - **Not measured yet.** The agent has no labelled eval; Phase 3 adds routing, task, hand-off and injection sets and a CI gate. Its prompts are versioned now so those runs can be compared.

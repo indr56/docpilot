@@ -14,8 +14,9 @@ from app.models.enums import AgentRunStatus, ApprovalStatus
 
 
 class AgentRun(UUIDPrimaryKey, Timestamps, Base):
-    """One goal handed to the agent. `messages` is the model's transcript, kept so a run can resume
-    after an approval; `sources` maps citation numbers [n] to the passages tools returned."""
+    """One goal handed to the agent. `stack` holds one frame per active agent ({agent, route, tools,
+    messages}), kept so a run can resume after an approval; the supervisor's frame is at the bottom when
+    it runs (specs/agent.md §14). `sources` maps citation numbers [n] to the passages tools returned."""
 
     __tablename__ = "agent_runs"
 
@@ -29,7 +30,7 @@ class AgentRun(UUIDPrimaryKey, Timestamps, Base):
     answer: Mapped[str | None] = mapped_column(Text)
     citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
     confidence: Mapped[str | None] = mapped_column(String(10))
-    messages: Mapped[list[dict[str, str]]] = mapped_column(JSONB, default=list, nullable=False)
+    stack: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
     sources: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
     tool_calls: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     invalid_calls: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -56,6 +57,7 @@ class AgentStep(UUIDPrimaryKey, Timestamps, Base):
 
     run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agent_runs.id", ondelete="CASCADE"))
     index: Mapped[int] = mapped_column(Integer, nullable=False)
+    agent: Mapped[str] = mapped_column(String(20), default="research", nullable=False)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     tool_name: Mapped[str | None] = mapped_column(String(50))
     thought: Mapped[str | None] = mapped_column(Text)

@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import AgentRun, Document, User
 from app.services.usage import UsageEntry
 
-ToolKind = Literal["read", "write"]
+ToolKind = Literal["read", "write", "handoff"]  # handoff: the runner pushes a specialist (specs §14)
 
 
 class ToolError(Exception):
@@ -125,7 +125,7 @@ def all_tools() -> list[Tool]:
 
 def _load() -> None:
     # Importing the modules registers their tools.
-    from app.tools import read_tools, write_tools  # noqa: F401
+    from app.tools import handoff_tools, read_tools, write_tools  # noqa: F401
 
 
 def parse_call(name: str, arguments_json: str, allowed: list[str]) -> tuple[Tool, BaseModel]:

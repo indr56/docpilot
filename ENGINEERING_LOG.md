@@ -2,6 +2,34 @@
 
 One entry per phase: what changed, the decisions behind it, and how it was checked. Newest first.
 
+## Phase 1b: a supervisor and two specialists (22 Nov 2026)
+
+**What:** the action route now runs a Supervisor that hands reading to a Research agent and saving to
+an Actions agent. Questions still go straight to Research. Spec: [specs/agent.md §14](specs/agent.md).
+
+**Added**
+
+- Hand-off tools `ask_research_agent` and `ask_actions_agent` (`tools/handoff_tools.py`), the
+  Supervisor's only tools; the runner intercepts them.
+- Per-agent tool lists in `agent/routes.py`; one prompt template with three roles (`agent-v2`).
+- A **stack of frames** on the run (`agent_runs.stack`, replacing `messages`) and the agent on each
+  step (`agent_steps.agent`), migration `0008_agent_frames`, which turns an existing transcript
+  into a one-frame stack and has a working downgrade (both tried on a database with a saved run).
+- 6 tests: questions skip the supervisor; the full supervisor → research → actions → approval →
+  supervisor path with one run id; citations surviving into the saved report; reject inside Actions;
+  Actions can't read; Research can't write or hand off; hand-offs count toward the step limit.
+
+**Decisions**
+
+- **Split on permission, not topic.** Two specialists because reading and writing need different
+  tools, prompts and trust; a third "report writer" agent was considered and dropped, because it
+  would need the same tools as Research and add a hand-off for nothing.
+- **The router stays as a fast path.** Only `action` pays for the Supervisor's extra calls.
+- **A stack, not separate runs.** One run id, one cost and step budget, one set of citation numbers,
+  and pause/resume works at any depth with the same code.
+
+**Verified:** 181 tests pass (175 + 6), `ruff check`, `ruff format --check` and `mypy app` clean.
+
 ## Phase 1a: the single agent (22 Nov 2026)
 
 **What:** an agent on top of the existing document system. A router picks one of 7 routes; a

@@ -74,52 +74,74 @@ def _answer_from(observation: str, limit: int = 3) -> str:
     return f"According to the documents, {snippet} " + " ".join(f"[{n}]" for n in numbers)
 
 
-def decide(messages: list[Message]) -> AgentDecision:
-    system, goal = messages[0]["content"], messages[1]["content"]
-    route_name = re.search(r"^Route: (\w+)", system, re.M).group(1)  # type: ignore[union-attr]
-    documents = re.findall(r"^- ([0-9a-f-]{36}) \| ", system, re.M)
-    first_doc = documents[0] if documents else ""
-    observations = [
+RESEARCH_PREFIX = "Find what is needed for: "
+CONTENT_MARK = "\n\nContent to use:\n"
+
+
+def _observations(messages: list[Message]) -> list[tuple[str, str]]:
+    return [
         (m.group(1), m.group(2))
         for msg in messages[2:]
         if msg["role"] == "user"
         and (m := re.match(r'<tool_result tool="(\w+)">\n(.*)\n</tool_result>$', msg["content"], re.S))
     ]
 
-    if route_name == "chat_only":
-        return _final("Hello! I can search, summarise, list, compare and save things from your documents.")
+
+def _supervise(goal: str, observations: list[tuple[str, str]]) -> AgentDecision:
+    """Research first, then hand the cited findings to Actions, then report both."""
+    answers = {t: c.split("answered:\n", 1)[-1] for t, c in observations}
+    if "ask_research_agent" not in answers:
+        return _call("ask_research_agent", {"task": RESEARCH_PREFIX + goal}, "First I need the facts.")
+    if "ask_actions_agent" not in answers:
+        task = goal + CONTENT_MARK + answers["ask_research_agent"]
+        return _call("ask_actions_agent", {"task": task}, "Now the actions agent can save it.")
+    return _final(f"{answers['ask_research_agent']}\n\n{answers['ask_actions_agent']}")
+
+
+def _act(task: str, first_doc: str, observations: list[tuple[str, str]]) -> AgentDecision:
     if observations:
-        tool, content = observations[-1]
+        content = observations[-1][1]
         if content.startswith("The user approved."):
             return _final(f"Done. {content.removeprefix('The user approved. ')}")
         if content.startswith("The user rejected"):
             return _final("Nothing was saved, as you declined the action.")
+        return _final(f"Could not save: {content[:200]}")
+    goal, _, content = task.partition(CONTENT_MARK)
+    content = content or goal
+    if "task" in goal.lower():
+        arguments: dict[str, object] = {"title": goal[:120], "document_id": first_doc or None, "notes": content}
+        return _call("create_task", arguments, "Creating the task.")
+    arguments = {"title": "Report: " + goal[:80], "content_markdown": content, "document_ids": [first_doc]}
+    return _call("save_report", arguments, "Saving the report.")
+
+
+def decide(messages: list[Message]) -> AgentDecision:
+    system, goal = messages[0]["content"], messages[1]["content"]
+    agent = re.search(r"^Agent: (\w+)", system, re.M).group(1)  # type: ignore[union-attr]
+    route_name = re.search(r"^Route: (\w+)", system, re.M).group(1)  # type: ignore[union-attr]
+    documents = re.findall(r"^- ([0-9a-f-]{36}) \| ", system, re.M)
+    first_doc = documents[0] if documents else ""
+    observations = _observations(messages)
+
+    if agent == "supervisor":
+        return _supervise(goal, observations)
+    if agent == "actions":
+        return _act(goal, first_doc, observations)
+    if route_name == "chat_only":
+        return _final("Hello! I can search, summarise, list, compare and save things from your documents.")
+    if observations:
+        _, content = observations[-1]
         if content.startswith("Error (too_long)"):
             return _call("get_document_notes", {"document_id": first_doc}, "Too long to read whole; using the notes.")
-        if route_name == "action" and not any(t in ("save_report", "create_task") for t, _ in observations):
-            if "task" in goal.lower():
-                return _call(
-                    "create_task",
-                    {"title": goal[:120], "document_id": first_doc or None, "notes": _answer_from(content)},
-                    "Creating the task the user asked for.",
-                )
-            return _call(
-                "save_report",
-                {
-                    "title": "Report: " + goal[:80],
-                    "content_markdown": _answer_from(content),
-                    "document_ids": documents[:1],
-                },
-                "Saving the report the user asked for.",
-            )
         return _final(_answer_from(content, 80 if route_name == "list_everything" else 3))
 
+    query = goal.removeprefix(RESEARCH_PREFIX)
     first_tool: dict[str, tuple[str, dict[str, object]]] = {
-        "pointed_fact": ("search_passages", {"query": goal}),
-        "unsure": ("search_passages", {"query": goal}),
-        "action": ("search_passages", {"query": goal}),
+        "pointed_fact": ("search_passages", {"query": query}),
+        "unsure": ("search_passages", {"query": query}),
+        "action": ("search_passages", {"query": query}),  # research working for the supervisor
         "whole_document": ("get_document_text", {"document_id": first_doc}),
-        "list_everything": ("scan_document", {"document_id": first_doc, "instruction": goal}),
+        "list_everything": ("scan_document", {"document_id": first_doc, "instruction": query}),
         "cross_document": ("compare_documents", {"document_ids": documents[:2], "focus": ""}),
     }
     tool, arguments = first_tool[route_name]

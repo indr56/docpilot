@@ -18,7 +18,8 @@ class ApprovalDecision(BaseModel):
 
 class AgentStepOut(BaseModel):
     index: int
-    kind: str = Field(description="route | tool_call | invalid_call | approval | rejected | final | error")
+    agent: str = Field(description="router | supervisor | research | actions")
+    kind: str = Field(description="route | handoff | tool_call | invalid_call | approval | rejected | final | error")
     tool_name: str | None
     thought: str | None
     arguments: dict[str, Any] | None

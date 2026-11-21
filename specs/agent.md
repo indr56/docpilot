@@ -1,6 +1,6 @@
 # Spec: the DocPilot agent (Phase 1a)
 
-Status: built in Phase 1a. Later phases (multi-agent, MCP) build on this spec, not around it.
+Status: 1a (single agent) and 1b (supervisor + two specialists, §14) built. Later phases (MCP) build on this spec, not around it.
 
 ## 1. Goal
 
@@ -151,6 +151,53 @@ dedupe; invalid arguments then a retry; the step limit; approval approve, reject
 approve (idempotent) and the other user's run (404); the stream's event order; tool scope (a
 document outside the run cannot be read).
 
-## 13. Out of scope for 1a
+## 13. Out of scope so far
 
-Multi-agent hand-offs (1b), MCP exposure (1c), the UI timeline (2), eval sets (3).
+MCP exposure (1c), the UI timeline (2), eval sets (3).
+
+## 14. Phase 1b: a supervisor and two specialists
+
+### Why split, and why on this line
+
+Split agents only when the parts need different tools, prompts or permissions; splitting by topic
+("a contracts agent, a finance agent") just adds hand-offs. DocPilot's real boundary is
+**permission**: reading is harmless, writing changes the user's data. So there are two specialists:
+
+| Agent | Tools | Prompt |
+| --- | --- | --- |
+| **Research** | read tools only (the route's set, or all read tools when the supervisor asks) | find and cite; never writes |
+| **Actions** | `list_documents`, `save_report`, `create_task` | stricter: do only the action asked, with the content it was given; never invent facts; one write per request |
+| **Supervisor** | `ask_research_agent`, `ask_actions_agent` (hand-off tools) | break the goal down, hand off, combine the answers |
+
+### When the supervisor runs
+
+The router (§3) stays the first step, as a fast path:
+
+- `chat_only` and the read routes go straight to the **Research** agent with that route's tools.
+  A question needs no supervisor, so it pays for no extra model call.
+- `action` goes to the **Supervisor**, because "read this, then save that" is two jobs for two
+  permission levels. It usually asks Research for the content, then hands that content to Actions.
+
+### How hand-offs work: a stack of frames
+
+A run keeps a **stack** of frames (`agent_runs.stack`), each `{agent, tools, messages}`.
+
+- A hand-off tool call pushes a new frame for the specialist, whose first user message is the task
+  the supervisor wrote. The loop always works on the top frame.
+- When a specialist gives its final answer, its frame is popped and the answer goes back to the
+  parent as the hand-off tool's result. When the last frame answers, the run is complete.
+- An approval pauses the run with the Actions frame on top; approving resumes that frame, and its
+  result flows back up to the supervisor.
+- **One run id** for the whole tree. Every step records which agent made it (`agent_steps.agent`),
+  so the timeline reads supervisor → research → supervisor → actions → approval → supervisor.
+- Limits are per run, not per agent: 8 tool calls in total (hand-offs count), one cost ceiling.
+- Citation numbers are per run, so a passage Research found as [3] is still [3] when Actions
+  saves a report that cites it.
+- A specialist can't hand off further (no hand-off tools), so the tree is at most two levels deep.
+
+### Tests
+
+Read routes skip the supervisor; an action run goes supervisor → research → actions → approval →
+supervisor with one run id; the Actions agent can't call read tools beyond `list_documents`; the
+Research agent can't call write tools; citations from Research survive into the saved report;
+rejecting inside Actions still returns to the supervisor for the final answer.

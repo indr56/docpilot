@@ -20,7 +20,14 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.router import route_goal
-from app.agent.routes import DOCUMENT_ROUTES, ROUTE_TOOLS
+from app.agent.routes import (
+    ACTIONS_TOOLS,
+    DOCUMENT_ROUTES,
+    HANDOFF_AGENT,
+    RESEARCH_TASK_TOOLS,
+    ROUTE_TOOLS,
+    SUPERVISOR_TOOLS,
+)
 from app.core.config import get_settings
 from app.core.errors import AppError, ConflictError, NotFoundError
 from app.core.logging import get_logger
@@ -52,6 +59,7 @@ class RunFailed(Exception):
 def step_out(step: AgentStep) -> dict[str, Any]:
     return {
         "index": step.index,
+        "agent": step.agent,
         "kind": step.kind,
         "tool_name": step.tool_name,
         "thought": step.thought,
@@ -109,8 +117,8 @@ def run_out(run: AgentRun, *, with_steps: bool = True) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- helpers
-def _add_step(run: AgentRun, kind: str, **fields: Any) -> AgentStep:
-    step = AgentStep(index=len(run.steps), kind=kind, **fields)
+def _add_step(run: AgentRun, kind: str, *, agent: str | None = None, **fields: Any) -> AgentStep:
+    step = AgentStep(index=len(run.steps), kind=kind, agent=agent or _top(run)["agent"], **fields)
     run.steps.append(step)
     return step
 
@@ -133,8 +141,49 @@ async def _checkpoint(db: AsyncSession, run: AgentRun, usages: list[UsageEntry])
     await db.commit()
 
 
+# --------------------------------------------------------------------------- frames (specs/agent.md §14)
+# The stack is reassigned on every change (never mutated in place) so SQLAlchemy sees the JSONB update.
+def _top(run: AgentRun) -> dict[str, Any]:
+    return run.stack[-1] if run.stack else {"agent": "research"}
+
+
 def _append(run: AgentRun, *messages: dict[str, str]) -> None:
-    run.messages = [*run.messages, *messages]  # reassign so SQLAlchemy sees the JSONB change
+    """Add messages to the transcript of the agent that is working now (the top frame)."""
+    top = _top(run)
+    run.stack = [*run.stack[:-1], {**top, "messages": [*top["messages"], *messages]}]
+
+
+def _push(run: AgentRun, frame: dict[str, Any]) -> None:
+    run.stack = [*run.stack, frame]
+
+
+def _pop(run: AgentRun) -> dict[str, Any]:
+    frame = run.stack[-1]
+    run.stack = run.stack[:-1]
+    return frame
+
+
+def _frame(
+    run: AgentRun,
+    scope: dict[uuid.UUID, Document],
+    *,
+    agent: str,
+    strategy: str,
+    tools: list[str],
+    task: str,
+    via: str | None = None,
+) -> dict[str, Any]:
+    specs = [t.spec() for name in tools if (t := get_tool(name)) is not None]
+    messages = agent_prompt.build_messages(
+        agent=agent,
+        task=task,
+        route=run.route or AgentRoute.UNSURE,
+        strategy=strategy,
+        documents=[(str(d.id), d.title) for d in scope.values()],
+        tools=specs,
+        max_steps=get_settings().agent_max_steps,
+    )
+    return {"agent": agent, "tools": tools, "via": via, "messages": messages}
 
 
 def _observation(result: ToolResult) -> str:
@@ -214,7 +263,6 @@ async def _fail(db: AsyncSession, run: AgentRun, usages: list[UsageEntry], code:
 async def _loop(db: AsyncSession, user: User, run: AgentRun, ctx: ToolContext) -> AsyncIterator[Event]:
     settings = get_settings()
     started = time.monotonic()
-    allowed = ROUTE_TOOLS[run.route or AgentRoute.UNSURE]
     usages = ctx.usages
     while True:
         if time.monotonic() - started > settings.agent_timeout_seconds:
@@ -229,7 +277,10 @@ async def _loop(db: AsyncSession, user: User, run: AgentRun, ctx: ToolContext) -
             )
             return
 
-        decision = await _decide(run.messages, usages)
+        frame = _top(run)
+        # A run saved before frames existed has no tool list: its route's tools apply (migration 0008).
+        allowed: list[str] = frame.get("tools") or ROUTE_TOOLS.get(run.route or "", [])
+        decision = await _decide(frame["messages"], usages)
         _append(run, {"role": "assistant", "content": decision.model_dump_json()})
 
         if decision.action == "final":
@@ -240,6 +291,21 @@ async def _loop(db: AsyncSession, user: User, run: AgentRun, ctx: ToolContext) -
                 if run.invalid_calls >= settings.agent_max_invalid_calls:
                     yield await _fail(db, run, usages, "invalid_tool_calls", "The model kept sending invalid calls.")
                     return
+                continue
+            if len(run.stack) > 1:
+                # A specialist finished: its answer goes back to the supervisor as the hand-off's result.
+                child = _pop(run)
+                answer = decision.answer.strip()
+                step = _add_step(
+                    run,
+                    "final",
+                    agent=child["agent"],
+                    thought=decision.thought,
+                    summary=f"answered the supervisor: {answer[:200]}",
+                )
+                _append(run, agent_prompt.tool_result(child["via"], f"The {child['agent']} agent answered:\n{answer}"))
+                await _checkpoint(db, run, usages)
+                yield ("step", step_out(step))
                 continue
             run.answer = decision.answer.strip()
             run.citations = _citations(run.answer, run.sources)
@@ -280,6 +346,42 @@ async def _loop(db: AsyncSession, user: User, run: AgentRun, ctx: ToolContext) -
         run.invalid_calls = 0
         run.tool_calls += 1
         arguments = args.model_dump(mode="json")
+
+        if tool.kind == "handoff":
+            task = getattr(args, "task", "")
+            agent = HANDOFF_AGENT[tool.name]
+            step = _add_step(
+                run,
+                "handoff",
+                tool_name=tool.name,
+                thought=decision.thought,
+                arguments=arguments,
+                summary=f"to {agent}: {task[:300]}",
+            )
+            if agent == "research":
+                child = _frame(
+                    run,
+                    ctx.scope,
+                    agent="research",
+                    strategy="research_task",
+                    tools=RESEARCH_TASK_TOOLS,
+                    task=task,
+                    via=tool.name,
+                )
+            else:
+                child = _frame(
+                    run,
+                    ctx.scope,
+                    agent="actions",
+                    strategy="actions_task",
+                    tools=ACTIONS_TOOLS,
+                    task=task,
+                    via=tool.name,
+                )
+            _push(run, child)
+            await _checkpoint(db, run, usages)
+            yield ("step", step_out(step))
+            continue
 
         if tool.kind == "write":
             approval = Approval(
@@ -334,7 +436,6 @@ async def _default_scope(db: AsyncSession, user: User) -> list[uuid.UUID]:
 
 
 async def start_run(db: AsyncSession, user: User, goal: str, document_ids: list[uuid.UUID]) -> AsyncIterator[Event]:
-    settings = get_settings()
     if document_ids:
         ids = list(dict.fromkeys(document_ids))
         await document_service.get_owned_documents(db, user, ids)  # 404 if any isn't theirs
@@ -352,11 +453,14 @@ async def start_run(db: AsyncSession, user: User, goal: str, document_ids: list[
     routed = await route_goal(goal, [d.title for d in scope.values()], ctx.usages)
     run.route, run.route_confidence, run.route_reason = routed.route, routed.confidence, routed.reason
     note = "" if routed.route == routed.picked else f" (picked {routed.picked} at {routed.confidence:.2f})"
-    step = _add_step(run, "route", summary=f"{routed.route}{note}: {routed.reason}"[:500])
-    tools = [t.spec() for name in ROUTE_TOOLS[routed.route] if (t := get_tool(name)) is not None]
-    run.messages = agent_prompt.build_messages(
-        goal, routed.route, [(str(d.id), d.title) for d in scope.values()], tools, settings.agent_max_steps
-    )
+    step = _add_step(run, "route", agent="router", summary=f"{routed.route}{note}: {routed.reason}"[:500])
+    if routed.route == AgentRoute.ACTION:
+        # Reading and writing are two permission levels: the supervisor splits the job (specs §14).
+        first = _frame(run, scope, agent="supervisor", strategy="supervise", tools=SUPERVISOR_TOOLS, task=goal)
+    else:
+        # A question needs no supervisor: the Research agent answers it with the route's tools.
+        first = _frame(run, scope, agent="research", strategy=routed.route, tools=ROUTE_TOOLS[routed.route], task=goal)
+    run.stack = [first]
     await _checkpoint(db, run, ctx.usages)
     yield ("step", step_out(step))
     async for event in _loop(db, user, run, ctx):
