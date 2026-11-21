@@ -119,7 +119,8 @@ async def _search_passages(ctx: ToolContext, args: SearchArgs) -> ToolResult:
 register(
     Tool(
         "search_passages",
-        "Hybrid (meaning + keyword) search over the documents. Best for a specific fact, name, number or clause.",
+        "Hybrid (meaning + keyword) search over the documents. Returns the best passages, numbered [n] with "
+        "document and page. Best for a specific fact, name, number or clause.",
         SearchArgs,
         "read",
         _search_passages,
@@ -190,7 +191,7 @@ async def _get_document_notes(ctx: ToolContext, args: DocumentArgs) -> ToolResul
 register(
     Tool(
         "get_document_notes",
-        "Condensed notes of every section of a LONG document (made when it was processed), with page "
+        "Returns condensed notes of every section of a LONG document (made when it was processed), with page "
         "markers. Use it when get_document_text says too_long.",
         DocumentArgs,
         "read",
@@ -217,7 +218,7 @@ async def _get_insights(ctx: ToolContext, args: DocumentArgs) -> ToolResult:
 register(
     Tool(
         "get_insights",
-        "The stored analysis of one document: summary, key points, and key facts with pages.",
+        "Returns the stored analysis of one document: summary, key points, and key facts with pages.",
         DocumentArgs,
         "read",
         _get_insights,

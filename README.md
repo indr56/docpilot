@@ -2,7 +2,7 @@
 
 Upload documents, get AI insights, **chat with them in natural language with every answer cited down to the document and page**, and hand bigger jobs to an **agent** that picks its own tools, asks before it changes anything, and cites what it used. Think "ChatGPT for your documents", built as a production-style backend with a simple web UI. It runs as one command on a laptop and is designed for thousands of documents.
 
-**At a glance:** 181 automated tests · a 25-question RAG eval with real models scoring 100% on answers, citations (document and page) and abstention · uploads answer in 17 ms and documents are ready in about 4 s · about $0.004 to process a document and about $0.002 per answered question.
+**At a glance:** 198 automated tests · a 25-question RAG eval with real models scoring 100% on answers, citations (document and page) and abstention · uploads answer in 17 ms and documents are ready in about 4 s · about $0.004 to process a document and about $0.002 per answered question.
 
 **Design principles:**
 
@@ -32,7 +32,7 @@ More screenshots: [documents and insights](docs/screenshots/documents.png) · [c
 4. [API overview (with curl)](#4-api-overview)
 5. [Data model](#5-data-model)
 6. [How chat (RAG) works](#6-how-chat-rag-works)
-7. [The agent](#7-the-agent)
+7. [The agent (and the MCP server)](#7-the-agent)
 8. [Design decisions, trade-offs and assumptions](#8-design-decisions-trade-offs-and-assumptions)
 9. [Scaling to thousands of documents](#9-scaling-to-thousands-of-documents)
 10. [Reliability, errors and observability](#10-reliability-errors-and-observability)
@@ -58,6 +58,7 @@ make up                    # builds and starts db, redis, api (+UI) and worker; 
 | Web UI | http://localhost:9700 |
 | Interactive API docs (Swagger) | http://localhost:9700/docs |
 | Health / readiness | http://localhost:9700/health · http://localhost:9700/health/ready |
+| MCP server (for Claude, Cursor and other MCP clients) | http://localhost:9700/mcp/ · `Authorization: Bearer docpilot-demo-key` (§7) |
 | API key (pre-seeded demo user) | `docpilot-demo-key` (header `X-API-Key`) |
 
 There's no `make`? Use `cp .env.example .env` then `docker compose up --build -d`.
@@ -75,7 +76,7 @@ Or run the whole scenario automatically:
 
 ```bash
 make smoke   # end-to-end: upload → process → insights → versioning → chat → streaming → summary → compare → metrics
-make test    # 181 tests in Docker with a fake AI provider (no API key or cost)
+make test    # 198 tests in Docker with a fake AI provider (no API key or cost)
 make eval    # RAG quality evaluation (25 questions) against the running stack
 make help    # all commands
 ```
@@ -112,7 +113,7 @@ make dev-ui       # terminal 3 (optional): UI dev server on :5173 with hot reloa
 | Document statistics API · Processing metrics API | `GET /metrics/documents` (counts, success rate, p50/p95, per-stage timings, errors, queue wait), plus `/metrics/ai-usage`, `/metrics/api`, `/metrics/system` |
 | Data storage (metadata and status, insights, conversations, messages with citations, processing metrics, performance data) | `documents`, `document_insights` + `document_summaries`, `chat_sessions`, `chat_messages` (citations + retrieval trace), `processing_runs` + `processing_stage_runs`, `request_metrics` + `ai_usage` (§5) |
 
-**Beyond the core:** multi-document chat · intelligent follow-up suggestions · summary customisation (length, focus, tone) · automated categorisation and tagging · sentiment and key-insight extraction · comparative analysis · an agent (router, tools, approvals) · a simple web UI · real-time updates over WebSocket · smart caching (embeddings and answers in Redis) · pgvector · streaming chat over SSE · 181 tests · cost tracking and optimisation · rate limiting and quotas · document version tracking · batch processing optimisations · structured logging and observability · health checks and monitoring endpoints. Where each lives:
+**Beyond the core:** multi-document chat · intelligent follow-up suggestions · summary customisation (length, focus, tone) · automated categorisation and tagging · sentiment and key-insight extraction · comparative analysis · an agent (router, tools, approvals) · an MCP server · a simple web UI · real-time updates over WebSocket · smart caching (embeddings and answers in Redis) · pgvector · streaming chat over SSE · 198 tests · cost tracking and optimisation · rate limiting and quotas · document version tracking · batch processing optimisations · structured logging and observability · health checks and monitoring endpoints. Where each lives:
 
 | Area | Feature | Where |
 |---|---|---|
@@ -135,6 +136,7 @@ make dev-ui       # terminal 3 (optional): UI dev server on :5173 with hot reloa
 | | **List everything**: `scan_document` maps over every section and merges deduplicated items with pages | `tools/read_tools.py` |
 | | **Approvals** for every write (save a report, create a task): idempotent, one lock per run, expiring, stored arguments only | `agent/runner.py` |
 | | Live steps over SSE; every run, step and approval stored | `/agent/runs/stream` |
+| | **MCP server**: the same tools for Claude, Cursor and other clients; scoped keys, server-side confirmation for writes, call log, per-key rate limit | `mcp/`, `/mcp/` |
 | **Product** | **Versioning** (upload a new version; history; open any older version; delete promotes the previous one) | `POST /documents` + `replaces_document_id` |
 | | **Download the original file** | `GET /documents/{id}/file` |
 | | **Duplicate detection** (same content returns the existing document, so nobody pays twice) | `services/documents.py` |
@@ -216,6 +218,7 @@ Errors always look like `{"error": {"code", "message", "details", "request_id"}}
 | GET | `/agent/runs` · `/agent/runs/{id}` | Your runs · one run with every step and any pending approval |
 | POST | `/agent/runs/{id}/approvals/{approval_id}` | `{"decision": "approve" \| "reject"}`, then the run continues (idempotent) |
 | GET | `/agent/outputs` | Reports and tasks the agent saved (`?kind=report\|task`) |
+| POST | `/mcp/` | MCP server (Streamable HTTP, JSON-RPC); `Authorization: Bearer <key>` with `mcp:read` / `mcp:write` scopes |
 | GET | `/metrics/documents` · `/ai-usage` · `/api` · `/system` | Monitoring |
 | WS | `/events` | Live document, comparison and chat events. Header `X-API-Key`, or for browsers a single-use `?ticket=` from `POST /events/ticket`, so the key never appears in a URL |
 | POST / GET / DELETE | `/api-keys` | Create (shown once) · list · revoke API keys |
@@ -288,6 +291,8 @@ erDiagram
     agent_runs ||--o{ agent_steps : "steps"
     agent_runs ||--o{ approvals : "write actions"
     agent_runs ||--o{ agent_outputs : "saved"
+    api_keys ||--o{ mcp_confirmations : "pending writes"
+    api_keys ||--o{ mcp_calls : "call log"
 ```
 
 | Table | Holds | Notes |
@@ -304,7 +309,9 @@ erDiagram
 | `agent_runs` | Goal, document scope, route + reason + confidence, status, answer, citations, confidence, the **stack** of agent frames (each agent's transcript and tools), tool calls, tokens, cost, error | Resumable after an approval; `sources` maps each [n] to a passage, for the whole run |
 | `agent_steps` | One row per route, hand-off, tool call, invalid call, approval, rejection, final answer or error: which **agent**, tool, arguments, short result, duration | The run's timeline across agents |
 | `approvals` | Tool, exact arguments + SHA-256, status, expiry, decided at | Conditional update makes decisions idempotent |
-| `agent_outputs` | Reports and tasks saved by write tools, linked to the run and documents | Only written after approval |
+| `agent_outputs` | Reports and tasks saved by write tools, linked to the run and documents | Only written after approval (agent) or confirmation (MCP) |
+| `mcp_confirmations` | Key, tool, arguments hash, status (pending → executing → executed), expiry, the stored result | Single-use writes for MCP clients |
+| `mcp_calls` | Key, owner, tool, ok, error code, duration, arguments hash and size | Never the arguments themselves |
 
 Schema is managed by **Alembic** (`backend/alembic/versions/`), applied automatically on API start.
 
@@ -392,6 +399,20 @@ A run keeps a **stack of frames**, one per working agent: a hand-off pushes the 
 **Why write it by hand (no agent framework).** The loop itself is about 115 lines (`agent/runner.py`, with approvals and the run lifecycle around it): one structured-output call per step, a tool registry with Pydantic schemas, and a run table that stores the transcript so a paused run can resume. That keeps every step visible in `agent_steps`, testable offline with the fake provider (28 tests), and costed per call in `ai_usage`, the same way as the rest of the system.
 
 **Prompt injection.** Tool results go back inside `<tool_result>` tags and the prompt says their text is data. More importantly, the worst an injected instruction can do is *propose* a write, which then waits for the user. A test covers exactly that.
+
+### DocPilot as an MCP server
+
+The same tools are also an **MCP server** at `/mcp/` (Streamable HTTP, stateless), so Claude, Cursor or any MCP client can use DocPilot directly. Full spec: [specs/mcp.md](specs/mcp.md).
+
+```bash
+claude mcp add --transport http docpilot http://localhost:9700/mcp/ --header "Authorization: Bearer docpilot-demo-key"
+```
+
+- **One tool layer.** MCP calls go through the same registry and handlers as the agent, in process: no HTTP hop back into the API and no second copy of the logic. `ask_documents` is a composite tool: one call runs the agent read-only and returns a cited answer.
+- **Scoped keys.** `POST /api-keys` takes `scopes`: `mcp:read` for the read tools, `mcp:write` for writes. No key, an unknown key or a revoked one is **401**; a key without `mcp:read` is **403**; a write without `mcp:write` is a `forbidden` tool error. The demo key has both.
+- **Writes are confirmed on the server.** The first `save_report` or `create_task` call saves nothing and returns a `confirmation_id` and a preview. The second call, with the same arguments and that id, saves. The id is single-use, bound to the key, the tool and the arguments' hash, and expires in 10 minutes; repeating it returns `already_executed` instead of writing twice.
+- **Lean, loud results.** Results are `{result, citations}` with citations as `{n, document_id, title, page}`; snippets, summaries and tags come only with `include`, and `list_documents` pages with a cursor. Failures are tool errors that start with a stable code (`not_in_scope: …`, `confirmation_mismatch: …`), never an empty success.
+- **Operated like an API.** Every call is logged in `mcp_calls` (tool, ok, error code, duration, and only a hash and size of the arguments), there is a per-key rate limit, and a test lints every tool description the model will read.
 
 ---
 
@@ -525,7 +546,7 @@ The growth path beyond that (roughly 100k+ documents or many concurrent users), 
 
 | Command | What | Cost |
 |---|---|---|
-| `make test` | 181 tests:<br/>• Units: parsing (incl. edge-case files), validation, chunking, RRF fusion, citation mapping, the quoted-figure check, cost, the cache guard, the version change list<br/>• API integration on real Postgres + Redis: upload, duplicates, validation, failures, batch, versioning, download, summaries, reprocess, chat with citations, abstention, multi-turn, caches, SSE, follow-up checks, comparison, metrics, rate limits, body limits, job recovery, documented error responses<br/>• Agent (28): every route, the supervisor's hand-offs and each agent's tool limits, invalid arguments then a retry, step / cost limits, tool scope, injected writes stay proposals, approve / reject / approve twice / expired / busy / another user, the SSE event order | Free (fake AI) |
+| `make test` | 198 tests:<br/>• Units: parsing (incl. edge-case files), validation, chunking, RRF fusion, citation mapping, the quoted-figure check, cost, the cache guard, the version change list<br/>• API integration on real Postgres + Redis: upload, duplicates, validation, failures, batch, versioning, download, summaries, reprocess, chat with citations, abstention, multi-turn, caches, SSE, follow-up checks, comparison, metrics, rate limits, body limits, job recovery, documented error responses<br/>• Agent (28): every route, the supervisor's hand-offs and each agent's tool limits, invalid arguments then a retry, step / cost limits, tool scope, injected writes stay proposals, approve / reject / approve twice / expired / busy / another user, the SSE event order<br/>• MCP (17): 401 / 403 / revoked keys, write scope, cursors and `include`, loud error codes, `ask_documents`, the confirmation flow (required, executed once, mismatch, another key, expired), the call log, the per-key rate limit, the description linter, all over real HTTP | Free (fake AI) |
 | `make lint` | ruff + mypy, all passing | — |
 | `make smoke` | The full user journey against the real stack and model, with readable output | ≈ $0.03 |
 | `make eval` | 25 labelled questions over the samples:<br/>• answer accuracy<br/>• citation document and page accuracy<br/>• abstention accuracy (incl. off-topic and prompt injection)<br/>• multi-document questions and arithmetic over cited figures, including after earlier questions in the same chat<br/>• wrong amounts stated next to correct working<br/>• false-abstention rate<br/>• citation marks that lead nowhere<br/>• follow-ups that repeat the answer<br/>• latency and cost | ≈ $0.05 |
@@ -555,6 +576,7 @@ backend/
     services/       business logic: documents, processing pipeline, parsing, chunking, retrieval,
                     chat (RAG), insights, comparison, metrics, cache, usage (cost), storage, events
     agent/          router, route → agent and tools, the loop with a stack of agent frames, approvals (runner.py)
+    mcp/            MCP server: service.py (keys, scopes, dispatch, confirmations, call log) + server.py (SDK adapter)
     tools/          tool registry + read tools (search, full text, notes, insights, scan, compare) + write tools + hand-offs
     llm/            provider interface + OpenAI + fake provider (+ fake_agent); prompts/ (one versioned file per prompt)
     models/         SQLAlchemy tables          schemas/  Pydantic API models
@@ -565,7 +587,7 @@ backend/
 frontend/           React + Vite + TypeScript UI (built into the API image, served at /)
 samples/            sample documents (+ edge cases)
 docs/               screenshots
-specs/              design specs written before the code (agent.md)
+specs/              design specs written before the code (agent.md, mcp.md)
 ENGINEERING_LOG.md  what changed in each phase, and why
 ```
 
@@ -586,6 +608,7 @@ The rules are kept simple so changes are quick and safe (details in [AGENTS.md](
 | [AI_USAGE.md](AI_USAGE.md) | How AI tools were used to build the system and how their output was verified; models, caching and cost; every prompt and the thinking behind it; the evaluation |
 | [AGENTS.md](AGENTS.md) | Commands, layering rules and where each kind of change goes, for engineers and AI coding agents |
 | [specs/agent.md](specs/agent.md) | The agent: routes, tools, the loop, approvals, run states, data and API |
+| [specs/mcp.md](specs/mcp.md) | The MCP server: scopes, tools and payloads, server-side confirmation, operations |
 | [ENGINEERING_LOG.md](ENGINEERING_LOG.md) | What each phase changed, the decisions and how it was verified |
 | http://localhost:9700/docs | Interactive API reference, with every request, response and error |
 

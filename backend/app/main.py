@@ -37,7 +37,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     async with get_async_sessionmaker()() as db:
         await ensure_demo_user(db)
     logger.info("api_started", environment=settings.environment, llm_provider=settings.llm_provider)
-    yield
+    from app.mcp.server import mcp_app
+
+    async with mcp_app.running():  # the MCP session manager runs for the app's lifetime
+        yield
     await get_async_engine().dispose()
 
 
@@ -133,6 +136,10 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(api_router, prefix=settings.api_prefix)
     _with_not_found_responses(app, settings.api_prefix)
+
+    from app.mcp.server import mcp_app
+
+    app.mount("/mcp", mcp_app, name="mcp")  # MCP over Streamable HTTP (specs/mcp.md)
 
     if STATIC_DIR.is_dir():  # the built React UI (copied in by the Docker build)
         app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="ui")

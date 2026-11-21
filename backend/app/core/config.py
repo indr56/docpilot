@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     agent_approval_ttl_hours: int = 24
     agent_router_min_confidence: float = 0.5  # below this the route becomes "unsure"
 
+    # --- MCP server (specs/mcp.md) ---
+    mcp_rate_limit_per_minute: int = 60  # per API key
+    mcp_confirmation_ttl_minutes: int = 10
+    mcp_resource_url: str = "http://localhost:9700/mcp"  # what clients connect to (OAuth resource metadata)
+
     # --- Limits & quotas (per user, across all of that user's API keys) ---
     rate_limit_per_minute: int = 120
     upload_rate_limit_per_minute: int = 20

@@ -1,11 +1,15 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class ApiKeyCreate(BaseModel):
     name: str = Field(default="default", min_length=1, max_length=100, description="A label, e.g. 'ci' or 'laptop'")
+    scopes: list[Literal["mcp:read", "mcp:write"]] = Field(
+        default_factory=list, description="MCP access for this key (specs/mcp.md); the REST API ignores scopes"
+    )
 
 
 class ApiKeyOut(BaseModel):
@@ -15,6 +19,7 @@ class ApiKeyOut(BaseModel):
     name: str
     key_prefix: str = Field(description="First characters of the key, to recognise it")
     is_active: bool
+    scopes: list[str]
     created_at: datetime
     last_used_at: datetime | None
 

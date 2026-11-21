@@ -45,7 +45,7 @@ An AI agent writes code fast, so the controls were about making sure that code i
 6. **No regressions:** the full suite runs after every change, in the agent's sandbox and again on my machine.
 7. **Real stack, not only mocks:** each slice was run against Postgres, Redis, the worker and real OpenAI calls.
 8. **Gates before any change is accepted:**
-   - `make test`: 181 tests on a fake AI provider (no key needed, repeatable)
+   - `make test`: 198 tests on a fake AI provider (no key needed, repeatable)
    - `make lint`: ruff and mypy; the UI is type-checked in every Docker build
    - `make smoke`: the full user journey with the real models
    - `make eval`: 25 labelled questions with the real models, including a multi-turn chat
@@ -393,13 +393,13 @@ The off-topic question and the prompt-injection attempt were both stopped before
 | Vector database | pgvector (HNSW) combined with Postgres full-text search | 12 |
 | Streaming chat responses | Answers stream over SSE; follow-ups arrive with the end of the answer | 9 |
 | Real-time updates | Each processing stage and "insights ready / failed" are pushed over a WebSocket, so the UI updates live | README |
-| Comprehensive test coverage | 181 tests on a fake AI provider plus a 25-case eval on the real models | 2, 15 |
+| Comprehensive test coverage | 198 tests on a fake AI provider plus a 25-case eval on the real models | 2, 15 |
 | Cost tracking and optimisation | Every call metered by operation, model and prompt version; cache savings counted; four cost layers | 8, 9 |
 | Rate limiting and quota management | Per-user rate limits and a daily token quota across all of a user's keys | 12 |
 | Document version tracking | Versions feed cache keys, insights and comparisons; comparing versions uses the computed change list | 8, 14 |
 | Batch processing optimisations | Embeddings in batches of 96; long-document map calls 8 at a time; batch upload | 9, 13 |
 | Logging and observability | Each AI call stored with tokens, cost, latency and success; AI metrics on `/metrics/ai-usage` | 9, 12 |
-| AI agent | A router picks one of 7 strategies; a Supervisor hands reading to a Research agent and saving to an Actions agent; a hand-written loop calls tools with schema-checked arguments; every write waits for an idempotent approval | 18 |
+| AI agent | A router picks one of 7 strategies; a Supervisor hands reading to a Research agent and saving to an Actions agent; a hand-written loop calls tools with schema-checked arguments; every write waits for an idempotent approval; the same tools are an MCP server with scoped keys and server-side confirmation | 18 |
 
 ### 18. The agent: prompts and safeguards
 
@@ -412,4 +412,5 @@ The full design is in [specs/agent.md](specs/agent.md). What matters for the AI 
 - **Injection.** Tool results are wrapped in `<tool_result>` and declared data. The real guard is structural: an injected "save this" can only create an approval the user sees and can reject (tested).
 - **The fake provider plays the model.** `llm/fake_agent.py` routes by keywords and follows a scripted policy reading only the prompt text, so the real router, registry, validation, approvals and citation code run in every test with no key.
 - **Three roles, one template.** The Supervisor can only hand off; Research can only read; Actions can only list documents and write, with approval. The tool lists are enforced by the code (`invalid_call` otherwise), so a confused model can't, say, have Research write a report. Questions skip the Supervisor, so the multi-agent cost is paid only by actions.
+- **MCP: the model is the client.** The MCP server exposes the same tools to someone else's model, so the tool descriptions are part of the product: a test lints each one (length, says what it returns, every argument described, write tools explain the confirmation step). On its first run it caught three registry descriptions that didn't say what the tool returns. Writes are confirmed on the server with a single-use id bound to the arguments, because a client-side "are you sure?" can be skipped by a model that simply calls twice.
 - **Not measured yet.** The agent has no labelled eval; Phase 3 adds routing, task, hand-off and injection sets and a CI gate. Its prompts are versioned now so those runs can be compared.

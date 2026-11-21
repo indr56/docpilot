@@ -15,6 +15,7 @@
 - `app/llm/prompts/<name>.py`: one prompt per file with a `VERSION` string. Bump `VERSION` when you change the wording (it's stored with usage rows and is part of the answer-cache key).
 - `app/workers/tasks.py`: thin wrappers that call services.
 - `app/agent/**` and `app/tools/**`: service-level code (no FastAPI). Tools run as the calling user and only on the run's documents (`ToolContext.document`). Write tools never run from the loop: they create an approval (specs/agent.md §6).
+- `app/mcp/service.py` knows nothing about the MCP SDK; only `app/mcp/server.py` imports it.
 - `specs/`: write or update the spec before changing a design; `ENGINEERING_LOG.md`: one entry per phase.
 - Every model call records usage: `record_usage` (sync) or `arecord_usage` (async), with `operation` and `prompt_version`.
 - Errors: raise an `AppError` subclass from `core/errors.py` with a stable `code`. Never return ad-hoc error JSON.
@@ -30,6 +31,7 @@
 | Swap or add an LLM vendor | new class implementing `llm/base.py::LLMProvider`, selected in `llm/__init__.py` |
 | Tune retrieval | `services/retrieval.py` and `retrieval_*` / `min_relevance_score` settings, then `make eval` |
 | New agent tool | a `Tool(...)` + `register(...)` in `tools/read_tools.py` or `tools/write_tools.py` (Pydantic args with `description`s; write tools need a `preview`) + add it to the routes or agents that should offer it in `agent/routes.py` (`ROUTE_TOOLS`, `RESEARCH_TASK_TOOLS`, `ACTIONS_TOOLS`; write tools only on Actions) + a fake-agent branch if a route should use it by default + a test in `tests/test_agent.py` |
+| Expose a tool over MCP | add its name to `READ_TOOLS` or `WRITE_TOOLS` in `mcp/service.py` (writes get the confirmation step automatically) + make sure `test_tool_descriptions_pass_the_linter` passes + a test in `tests/test_mcp.py` |
 | New agent route | `AgentRoute` enum + `agent/routes.py` + `STRATEGY` in `llm/prompts/agent.py` + the router prompt + `llm/fake_agent.py` + a test |
 
 ## Conventions

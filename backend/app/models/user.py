@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, Timestamps, UUIDPrimaryKey
@@ -24,6 +25,8 @@ class ApiKey(UUIDPrimaryKey, Timestamps, Base):
     key_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(12), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # MCP scopes ("mcp:read", "mcp:write"; specs/mcp.md §3). The REST API ignores them.
+    scopes: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"), nullable=False)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="api_keys")

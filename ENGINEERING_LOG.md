@@ -2,6 +2,47 @@
 
 One entry per phase: what changed, the decisions behind it, and how it was checked. Newest first.
 
+## Phase 1c: the MCP server (22 Nov 2026)
+
+**What:** DocPilot's tools as an MCP server at `/mcp/`, for Claude, Cursor and other clients.
+Spec: [specs/mcp.md](specs/mcp.md).
+
+**Added**
+
+- `app/mcp/service.py` (no SDK imports): scopes, the tool list and schemas, in-process dispatch to the
+  tool registry, `list_documents` with a cursor and `include`, the composite `ask_documents`
+  (the agent, read-only), server-side confirmation for writes, the per-key rate limit, the call log
+  and the description linter.
+- `app/mcp/server.py`: the adapter to the official `mcp` SDK (2.3.0): a low-level server over
+  stateless Streamable HTTP with JSON responses, bearer-key auth (401 / 403 from the SDK), tool
+  annotations (read-only hints).
+- `api_keys.scopes` (`mcp:read`, `mcp:write`; `POST /api-keys` takes them; the demo key has both),
+  tables `mcp_confirmations` and `mcp_calls`, migration `0009_mcp` (tried up and down).
+- `start_run(read_only=True)`: an action route becomes `unsure`, so `ask_documents` can't propose writes.
+- 17 tests, all over real HTTP through the mounted app.
+
+**Decisions**
+
+- **Low-level SDK server, not the decorator API.** Our tools already have JSON schemas and
+  validation; the decorator API would rebuild schemas from Python signatures. The low-level server
+  takes our schemas as they are, so the agent and MCP can't drift apart.
+- **Confirmation on the server.** First call: a single-use id and a preview, nothing written.
+  Second call with the same arguments: the write. Bound to the key, the tool and the arguments'
+  hash; 10-minute expiry; `pending → executing → executed` by conditional update, and the stored
+  result is returned for repeats, so a retry after a timeout never writes twice. A failed write
+  releases the claim.
+- **Stateless HTTP.** No session affinity, so it scales like the REST API.
+
+**Problems found while building**
+
+- The SDK's session manager can run only once and must be entered and exited in the same task. The
+  test suite starts the app several times (and exits from another task), so `McpApp` builds a fresh
+  MCP app on each start and runs the session manager in its own background task.
+- The description linter failed on its first run: `search_passages`, `get_document_notes` and
+  `get_insights` didn't say what they return. Fixed in the registry, so the agent's prompt improved too.
+
+**Verified:** 198 tests pass (181 + 17), `ruff check`, `ruff format --check` and `mypy app` clean.
+
 ## Phase 1b: a supervisor and two specialists (22 Nov 2026)
 
 **What:** the action route now runs a Supervisor that hands reading to a Research agent and saving to

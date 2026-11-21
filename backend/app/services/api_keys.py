@@ -16,9 +16,15 @@ from app.models import ApiKey, User
 PREFIX_CHARS = 10  # "dpkey_Ab3d" - enough to recognise a key in a list, useless to an attacker
 
 
-async def create_key(db: AsyncSession, user: User, name: str) -> tuple[ApiKey, str]:
+async def create_key(db: AsyncSession, user: User, name: str, scopes: list[str] | None = None) -> tuple[ApiKey, str]:
     raw = generate_api_key()
-    key = ApiKey(user_id=user.id, name=name.strip(), key_hash=hash_api_key(raw), key_prefix=raw[:PREFIX_CHARS])
+    key = ApiKey(
+        user_id=user.id,
+        name=name.strip(),
+        key_hash=hash_api_key(raw),
+        key_prefix=raw[:PREFIX_CHARS],
+        scopes=sorted(set(scopes or [])),
+    )
     db.add(key)
     await db.commit()
     await db.refresh(key)

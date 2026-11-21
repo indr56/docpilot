@@ -3,6 +3,7 @@
 from app.models.agent import AgentOutput, AgentRun, AgentStep, Approval
 from app.models.chat import ChatMessage, ChatSession, chat_session_documents
 from app.models.document import Document, DocumentChunk, DocumentInsight, DocumentSummary
+from app.models.mcp import McpCall, McpConfirmation
 from app.models.metrics import AIUsage, Comparison, ProcessingRun, RequestMetric, StageRun
 from app.models.user import ApiKey, User
 
@@ -20,6 +21,8 @@ __all__ = [
     "DocumentChunk",
     "DocumentInsight",
     "DocumentSummary",
+    "McpCall",
+    "McpConfirmation",
     "ProcessingRun",
     "RequestMetric",
     "StageRun",

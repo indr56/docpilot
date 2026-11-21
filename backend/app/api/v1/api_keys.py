@@ -24,7 +24,7 @@ CurrentUser = Annotated[User, Depends(rate_limited("default"))]
     summary="Create an API key (the full key is shown only in this response)",
 )
 async def create_api_key(body: ApiKeyCreate, db: DB, user: CurrentUser) -> ApiKeyCreated:
-    key, raw = await service.create_key(db, user, body.name)
+    key, raw = await service.create_key(db, user, body.name, list(body.scopes))
     return ApiKeyCreated(**ApiKeyOut.model_validate(key).model_dump(), key=raw)
 
 

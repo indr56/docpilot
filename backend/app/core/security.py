@@ -16,6 +16,8 @@ from app.db.base import utcnow
 from app.db.session import get_db
 from app.models import ApiKey, User
 
+MCP_SCOPES = ("mcp:read", "mcp:write")  # specs/mcp.md §3
+
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False, description="Your API key")
 
 
@@ -77,5 +79,5 @@ async def ensure_demo_user(db: AsyncSession) -> None:
         user = User(email=settings.demo_user_email)
         db.add(user)
         await db.flush()
-    db.add(ApiKey(user_id=user.id, name="demo", key_hash=key_hash, key_prefix=raw_key[:8]))
+    db.add(ApiKey(user_id=user.id, name="demo", key_hash=key_hash, key_prefix=raw_key[:8], scopes=list(MCP_SCOPES)))
     await db.commit()

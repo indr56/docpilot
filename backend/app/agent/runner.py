@@ -435,7 +435,10 @@ async def _default_scope(db: AsyncSession, user: User) -> list[uuid.UUID]:
     return [d.id for d in documents]
 
 
-async def start_run(db: AsyncSession, user: User, goal: str, document_ids: list[uuid.UUID]) -> AsyncIterator[Event]:
+async def start_run(
+    db: AsyncSession, user: User, goal: str, document_ids: list[uuid.UUID], *, read_only: bool = False
+) -> AsyncIterator[Event]:
+    """read_only (MCP's ask_documents): an action route becomes unsure, so the run can't propose writes."""
     if document_ids:
         ids = list(dict.fromkeys(document_ids))
         await document_service.get_owned_documents(db, user, ids)  # 404 if any isn't theirs
@@ -451,6 +454,8 @@ async def start_run(db: AsyncSession, user: User, goal: str, document_ids: list[
     scope = await _scope_documents(db, user, run.document_ids)
     ctx = ToolContext(db=db, user=user, run=run, scope=scope)
     routed = await route_goal(goal, [d.title for d in scope.values()], ctx.usages)
+    if read_only and routed.route == AgentRoute.ACTION:
+        routed.route = AgentRoute.UNSURE
     run.route, run.route_confidence, run.route_reason = routed.route, routed.confidence, routed.reason
     note = "" if routed.route == routed.picked else f" (picked {routed.picked} at {routed.confidence:.2f})"
     step = _add_step(run, "route", agent="router", summary=f"{routed.route}{note}: {routed.reason}"[:500])
