@@ -14,6 +14,8 @@
 - `app/llm/**`: the only place that knows a vendor SDK. Services call `get_provider()`.
 - `app/llm/prompts/<name>.py`: one prompt per file with a `VERSION` string. Bump `VERSION` when you change the wording (it's stored with usage rows and is part of the answer-cache key).
 - `app/workers/tasks.py`: thin wrappers that call services.
+- `app/agent/**` and `app/tools/**`: service-level code (no FastAPI). Tools run as the calling user and only on the run's documents (`ToolContext.document`). Write tools never run from the loop: they create an approval (specs/agent.md §6).
+- `specs/`: write or update the spec before changing a design; `ENGINEERING_LOG.md`: one entry per phase.
 - Every model call records usage: `record_usage` (sync) or `arecord_usage` (async), with `operation` and `prompt_version`.
 - Errors: raise an `AppError` subclass from `core/errors.py` with a stable `code`. Never return ad-hoc error JSON.
 
@@ -27,6 +29,8 @@
 | DB change | edit `models/`, then `alembic revision --autogenerate -m "..."`, review the file, `make test` |
 | Swap or add an LLM vendor | new class implementing `llm/base.py::LLMProvider`, selected in `llm/__init__.py` |
 | Tune retrieval | `services/retrieval.py` and `retrieval_*` / `min_relevance_score` settings, then `make eval` |
+| New agent tool | a `Tool(...)` + `register(...)` in `tools/read_tools.py` or `tools/write_tools.py` (Pydantic args with `description`s; write tools need a `preview`) + add it to the routes that should offer it in `agent/routes.py` + a fake-agent branch if a route should use it by default + a test in `tests/test_agent.py` |
+| New agent route | `AgentRoute` enum + `agent/routes.py` + `STRATEGY` in `llm/prompts/agent.py` + the router prompt + `llm/fake_agent.py` + a test |
 
 ## Conventions
 - Python 3.12, full type hints, Pydantic v2, SQLAlchemy 2.0 typed models, line length 120 (ruff).

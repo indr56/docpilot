@@ -90,3 +90,38 @@ class SectionNotes(BaseModel):
     """Map step for very long documents: dense notes for one section."""
 
     notes: str
+
+
+# --------------------------------------------------------------------------- agent (specs/agent.md)
+AgentRouteName = Literal[
+    "chat_only", "pointed_fact", "whole_document", "list_everything", "cross_document", "action", "unsure"
+]
+
+
+class RouteDecision(BaseModel):
+    """The router's choice of strategy for one goal."""
+
+    route: AgentRouteName
+    confidence: float = Field(description="0.0 (a guess) to 1.0 (certain)")
+    reason: str = Field(description="One short sentence: why this route")
+
+
+class AgentDecision(BaseModel):
+    """One turn of the agent loop: either call one tool, or give the final answer."""
+
+    thought: str = Field(description="One short sentence on what you are doing next and why (shown to the user)")
+    action: Literal["tool", "final"]
+    tool_name: str = Field(description="The tool to call when action is 'tool', else an empty string")
+    arguments_json: str = Field(description="The tool's arguments as a JSON object string; '{}' when final")
+    answer: str = Field(description="The final answer with [n] citations when action is 'final', else empty")
+
+
+class ScanItem(BaseModel):
+    text: str = Field(description="The item, quoted or closely paraphrased from the section")
+    page: int | None = Field(description="The page it is on, from the [Page n] markers, or null")
+
+
+class ScanItems(BaseModel):
+    """Map step of scan_document: every matching item in one section."""
+
+    items: list[ScanItem]

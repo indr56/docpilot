@@ -231,7 +231,7 @@ async def test_long_document_map_reduce_fits_budget_and_reuses_notes(
     text = insights.prepare_analysis_text(document, parsed)
     first_calls = calls["map"]
     assert insights.count_tokens(text) <= 1_500  # was: level-1 notes joined without a size check
-    level_1 = len(insights._split_sections(parsed, 1_000))
+    level_1 = len(insights.split_sections(parsed, 1_000))
     assert level_1 > 30  # each oversized page was split into pieces
     assert first_calls > level_1  # a second (reduce) level ran on the notes
 

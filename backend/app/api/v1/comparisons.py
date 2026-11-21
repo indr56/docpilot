@@ -6,16 +6,14 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ConflictError, NotFoundError, NotReadyError, QueueUnavailableError, error_responses
+from app.core.errors import ConflictError, NotFoundError, error_responses
 from app.core.logging import get_logger
 from app.core.rate_limit import rate_limited
 from app.db.session import get_db
 from app.models import Comparison, User
-from app.models.enums import ComparisonStatus, DocumentStatus
+from app.models.enums import ComparisonStatus
 from app.schemas.chat import ComparisonCreate, ComparisonOut
-from app.services import events, jobs
-from app.services.documents import get_owned_documents
-from app.workers import tasks
+from app.services import comparison_requests, events, jobs
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/comparisons", tags=["comparisons"])
@@ -35,22 +33,7 @@ ChatUser = Annotated[User, Depends(rate_limited("chat"))]
     "`comparison.completed` on the events WebSocket.",
 )
 async def create_comparison(body: ComparisonCreate, db: DB, user: ChatUser) -> ComparisonOut:
-    ids = list(dict.fromkeys(body.document_ids))
-    documents = await get_owned_documents(db, user, ids)
-    not_ready = [str(d.id) for d in documents if d.status != DocumentStatus.READY]
-    if not_ready:
-        raise NotReadyError("All documents must be ready before comparing.", details={"not_ready": not_ready})
-    comparison = Comparison(owner_id=user.id, document_ids=[str(i) for i in ids], focus=" ".join(body.focus.split()))
-    db.add(comparison)
-    await db.commit()
-    await db.refresh(comparison)
-    try:
-        await asyncio.to_thread(tasks.enqueue_comparison, comparison.id)
-    except Exception as exc:
-        logger.exception("enqueue_failed", comparison_id=str(comparison.id))
-        await db.delete(comparison)  # nothing will run it; don't leave a row "pending" forever
-        await db.commit()
-        raise QueueUnavailableError("The job queue is unavailable right now. Please try again shortly.") from exc
+    comparison = await comparison_requests.create_comparison(db, user, body.document_ids, body.focus)
     return ComparisonOut.model_validate(comparison)
 
 

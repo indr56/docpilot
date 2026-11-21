@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import api_keys, chat, comparisons, config, documents, events, metrics
+from app.api.v1 import agent, api_keys, chat, comparisons, config, documents, events, metrics
 from app.core.errors import error_responses
 
 # Every /api/v1 endpoint needs a key, validates its input and is rate limited. 404 is added to routes
@@ -11,6 +11,7 @@ api_router = APIRouter()
 api_router.include_router(documents.router, responses=COMMON_ERRORS)
 api_router.include_router(chat.router, responses=COMMON_ERRORS)
 api_router.include_router(comparisons.router, responses=COMMON_ERRORS)
+api_router.include_router(agent.router, responses=COMMON_ERRORS)
 api_router.include_router(metrics.router, responses=COMMON_ERRORS)
 api_router.include_router(events.router, responses=COMMON_ERRORS)
 api_router.include_router(api_keys.router, responses=COMMON_ERRORS)

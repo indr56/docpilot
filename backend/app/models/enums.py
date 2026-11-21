@@ -39,3 +39,26 @@ class ComparisonStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class AgentRunStatus(StrEnum):
+    RUNNING = "running"
+    WAITING_APPROVAL = "waiting_approval"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ApprovalStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class AgentRoute(StrEnum):
+    CHAT_ONLY = "chat_only"
+    POINTED_FACT = "pointed_fact"
+    WHOLE_DOCUMENT = "whole_document"
+    LIST_EVERYTHING = "list_everything"
+    CROSS_DOCUMENT = "cross_document"
+    ACTION = "action"
+    UNSURE = "unsure"

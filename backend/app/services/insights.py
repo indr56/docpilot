@@ -44,7 +44,9 @@ def _group(blocks: list[str], max_tokens: int) -> list[str]:
     return groups
 
 
-def _split_sections(parsed: ParsedDocument, max_tokens: int) -> list[str]:
+def split_sections(parsed: ParsedDocument, max_tokens: int) -> list[str]:
+    """Consecutive pages packed into sections of at most max_tokens, each page with its [Page n] marker.
+    Also used by the agent's scan_document tool."""
     return _group([f"[Page {p.number}]\n{p.text}" if p.number else p.text for p in parsed.pages], max_tokens)
 
 
@@ -112,7 +114,7 @@ def prepare_analysis_text(document: Document, parsed: ParsedDocument) -> str:
     if count_tokens(text) <= budget:
         return text
 
-    notes = _notes_for(document, _split_sections(parsed, SECTION_TOKENS))
+    notes = _notes_for(document, split_sections(parsed, SECTION_TOKENS))
     levels = 1
     while count_tokens("\n\n".join(notes)) > budget and levels < MAX_REDUCE_LEVELS:
         notes = _notes_for(document, _group(notes, SECTION_TOKENS))

@@ -14,9 +14,11 @@ from typing import TypeVar, cast
 from pydantic import BaseModel
 
 from app.core.config import Settings
+from app.llm import fake_agent
 from app.llm.base import Completion, Embeddings, Message, StreamEvent, StructuredCompletion, Usage
 from app.llm.prompts.chat import ABSTAIN_PREFIX
 from app.llm.schemas import (
+    AgentDecision,
     AnsweredSuggestions,
     ComparisonOutput,
     DocumentBrief,
@@ -24,6 +26,8 @@ from app.llm.schemas import (
     FollowUpQuestions,
     InsightsOutput,
     KeyFact,
+    RouteDecision,
+    ScanItems,
     SectionNotes,
     Sentiment,
 )
@@ -75,7 +79,13 @@ class FakeProvider:
     ) -> StructuredCompletion[T]:
         text = messages[-1]["content"]
         value: BaseModel
-        if response_model is InsightsOutput:
+        if response_model is RouteDecision:
+            value = fake_agent.route(messages)
+        elif response_model is AgentDecision:
+            value = fake_agent.decide(messages)
+        elif response_model is ScanItems:
+            value = fake_agent.scan(messages)
+        elif response_model is InsightsOutput:
             value = self._insights(text)
         elif response_model is SectionNotes:
             value = SectionNotes(notes=text.split("<section>", 1)[-1][:2000])

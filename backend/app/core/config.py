@@ -70,6 +70,18 @@ class Settings(BaseSettings):
     semantic_cache_max_entries: int = 200
     embedding_cache_ttl_seconds: int = 7 * 24 * 3600
 
+    # --- Agent (specs/agent.md) ---
+    agent_max_steps: int = 8  # tool calls per run, across approvals
+    agent_max_invalid_calls: int = 3  # invalid tool calls in a row before the run fails
+    agent_max_cost_usd: float = 0.05  # checked before every model call
+    agent_timeout_seconds: int = 90  # wall clock for one stretch of a run (start, or one resume)
+    agent_observation_chars: int = 6000  # a tool result is cut to this before the model sees it
+    agent_document_token_budget: int = 12_000  # get_document_text returns the whole text up to this
+    agent_scan_section_tokens: int = 3000  # scan_document maps over sections of this size
+    agent_max_scope_documents: int = 50  # a run with no documents named covers your latest ready ones
+    agent_approval_ttl_hours: int = 24
+    agent_router_min_confidence: float = 0.5  # below this the route becomes "unsure"
+
     # --- Limits & quotas (per user, across all of that user's API keys) ---
     rate_limit_per_minute: int = 120
     upload_rate_limit_per_minute: int = 20

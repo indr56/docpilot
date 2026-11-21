@@ -243,7 +243,7 @@ async def test_map_calls_run_in_parallel_and_keep_their_order(
     assert min(page_tokens) * 2 > section
     monkeypatch.setattr(insights, "SECTION_TOKENS", section)
     monkeypatch.setattr(get_settings(), "insights_max_input_tokens", sum(page_tokens) // 2)  # too long to read whole
-    assert len(insights._split_sections(parsed, section)) == 16
+    assert len(insights.split_sections(parsed, section)) == 16
 
     started = time.perf_counter()
     text = insights.prepare_analysis_text(document, parsed)
