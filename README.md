@@ -575,6 +575,8 @@ dangling_citation_marks 0 · wrong_amounts 0 · follow_up_repeat 0.018 · latenc
 
 Every push runs the **offline** evals (fake provider: they hold the plumbing, safety and MCP metrics at their baseline) and the gate; a change to prompts, agent, tools, retrieval, chat, OCR or the evals also runs the **real-model** evals and the gate against `evals/baselines/real.json`, with the table on the run's summary page. A better score never moves the baseline by itself: committing a new baseline is a reviewed change.
 
+First real-model run (all sets, $0.20): routing 24/24, task success 13/14, facts, tools and cited pages all correct, injection and MCP 100%, the 25 chat questions 100%. It also caught two bugs the offline tests couldn't: a curly apostrophe that hid a "not in the documents" answer from the confidence rule, and a judge that saw too little of each passage ([ENGINEERING_LOG.md](ENGINEERING_LOG.md)).
+
 
 The eval is deterministic (substring and citation checks, no model grading), so prompt or model changes can be compared run to run, and it bypasses the answer cache so it always measures the model. Results are saved to `backend/evals/results/`.
 

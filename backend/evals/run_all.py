@@ -13,7 +13,6 @@ import argparse
 import asyncio
 import json
 import os
-import re
 import shutil
 import statistics
 import sys
@@ -84,13 +83,6 @@ def in_order(called: list[str], order: list[str]) -> bool:
     return all(any(c == want for c in it) for want in order)
 
 
-NOT_COVERED = re.compile(
-    r"(don't|do not|doesn't|does not|isn't|is not|couldn't|could not|no )\b.{0,60}\b"
-    r"(contain|mention|say|state|include|cover|find|found|provide|give|report|disclose)",
-    re.I,
-)
-
-
 async def judge(answer: str, citations: list[dict[str, Any]], usages: list[Any]) -> float:
     from app.llm import get_provider
     from app.llm.prompts import eval_judge
@@ -99,7 +91,7 @@ async def judge(answer: str, citations: list[dict[str, Any]], usages: list[Any])
 
     provider = get_provider()
     result = await provider.acomplete_structured(
-        eval_judge.build_messages(answer, [(c["number"], c["snippet"]) for c in citations]),
+        eval_judge.build_messages(answer, [(c["number"], c.get("passage") or c["snippet"]) for c in citations]),
         JudgeVerdict,
         max_tokens=800,
     )
@@ -147,6 +139,8 @@ async def eval_routes(ids: dict[str, str], usages: list[Any]) -> list[dict[str, 
 
 
 async def eval_tasks(client: Any, ids: dict[str, str], usages: list[Any]) -> list[dict[str, Any]]:
+    from app.agent.runner import says_not_covered  # the product's own rule (imported after configure())
+
     out = []
     for case in json.loads((SETS / "tasks.json").read_text())["cases"]:
         run, ms = await run_goal(client, case["goal"], [ids[d] for d in case["docs"]], approve=True)
@@ -175,7 +169,7 @@ async def eval_tasks(client: Any, ids: dict[str, str], usages: list[Any]) -> lis
         if case.get("agents"):
             checks["agents"] = set(case["agents"]) <= {s["agent"] for s in run.get("steps", [])}
         if case.get("abstain"):
-            checks["abstain"] = bool(NOT_COVERED.search(answer)) or run.get("confidence") == "low"
+            checks["abstain"] = says_not_covered(answer) or run.get("confidence") == "low"
         faithful = await judge(answer, run.get("citations", []), usages) if answer and not case.get("abstain") else None
         out.append(
             {

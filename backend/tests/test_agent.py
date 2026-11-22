@@ -416,3 +416,20 @@ async def test_handoffs_count_toward_the_runs_step_limit(
     body = await run(client, "Save a report of the termination terms", [ready_docs["agreement"]])
     assert body["status"] == "failed" and body["error_code"] == "step_limit"
     assert body["tool_calls"] == 2  # the hand-off to research + research's search
+
+
+def test_not_covered_answers_are_low_confidence_even_with_curly_apostrophes() -> None:
+    from app.agent.runner import says_not_covered
+
+    # Seen in the first real-model eval: the model wrote a curly apostrophe (U+2019), which the rule missed.
+    assert says_not_covered("I couldn’t find Harbor Foods’ total employee headcount in the passages.")
+    assert says_not_covered("The documents don't mention a headcount.")
+    assert not says_not_covered("The monthly fee is $31,500 [1].")
+
+
+async def test_citations_carry_the_full_passage_for_checking(
+    client: httpx.AsyncClient, ready_docs: dict[str, str]
+) -> None:
+    body = await run(client, "What is the flood deductible?", [ready_docs["policy"]])
+    citation = body["citations"][0]
+    assert len(citation["snippet"]) <= 300 and citation["passage"].startswith(citation["snippet"][:50])

@@ -44,6 +44,7 @@ class CitationOut(BaseModel):
     document_title: str
     page: int | None
     snippet: str
+    passage: str | None = Field(default=None, description="The cited text, up to 2,000 characters, to check the claim")
 
 
 class AgentRunOut(BaseModel):

@@ -54,15 +54,26 @@ class ToolContext:
             raise ToolError("not_in_scope", f"Document {document_id} is not one of the documents in scope.")
         return document
 
-    def add_source(self, document: Document, page: int | None, snippet: str) -> int:
-        """Register a passage the model may cite; returns its number [n]. The same passage keeps its number."""
-        snippet = " ".join(snippet.split())[:300]
+    def add_source(self, document: Document, page: int | None, text: str) -> int:
+        """Register a passage the model may cite; returns its number [n]. The same passage keeps its number.
+
+        `snippet` (300 characters) is for display; `passage` (up to 2,000) is what a reader, or the eval's
+        faithfulness judge, needs to check the claim: a fact deep in a chunk is not in its first 300 characters.
+        """
+        flat = " ".join(text.split())
+        snippet, passage = flat[:300], flat[:2000]
         for i, source in enumerate(self.run.sources, start=1):
             if source["document_id"] == str(document.id) and source["page"] == page and source["snippet"] == snippet:
                 return i
         self.run.sources = [
             *self.run.sources,
-            {"document_id": str(document.id), "document_title": document.title, "page": page, "snippet": snippet},
+            {
+                "document_id": str(document.id),
+                "document_title": document.title,
+                "page": page,
+                "snippet": snippet,
+                "passage": passage,
+            },
         ]
         return len(self.run.sources)
 

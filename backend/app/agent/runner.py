@@ -206,13 +206,21 @@ def _citations(answer: str, sources: list[dict[str, Any]]) -> list[dict[str, Any
     return [{"number": n, **sources[n - 1]} for n in seen]
 
 
+# "The documents don't say", "I couldn't find ...", "not found in the passages". Models write curly
+# apostrophes too (U+2019): answers are normalised to straight ones before matching.
 _NOT_COVERED = re.compile(
-    r"\b(don't|do not|doesn't|does not|couldn't|could not)\b.{0,40}\b(contain|mention|say|cover|find)", re.I
+    r"\b(don't|do not|doesn't|does not|didn't|did not|couldn't|could not|can't|cannot|isn't|is not|no)\b"
+    r".{0,60}\b(contain|mention|say|state|include|cover|find|found|provide|give|report|disclose)",
+    re.I,
 )
 
 
+def says_not_covered(answer: str) -> bool:
+    return bool(_NOT_COVERED.search(answer.replace("\u2019", "'").replace("\u2018", "'")))
+
+
 def _confidence(run: AgentRun) -> str:
-    if run.route in DOCUMENT_ROUTES and (not run.citations or _NOT_COVERED.search(run.answer or "")):
+    if run.route in DOCUMENT_ROUTES and (not run.citations or says_not_covered(run.answer or "")):
         return "low"
     if run.route == AgentRoute.UNSURE or any(s.kind == "invalid_call" for s in run.steps):
         return "medium"

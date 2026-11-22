@@ -2,6 +2,35 @@
 
 One entry per phase: what changed, the decisions behind it, and how it was checked. Newest first.
 
+## The first real-model eval run (22 Nov 2026)
+
+Run on GitHub Actions with the real model, commit 5b7bd2a; **cost $0.20** for every set.
+
+| Metric | Result |
+| --- | --- |
+| Routing | 24/24 (1.0) |
+| Task success | 13/14 (0.929) |
+| Facts, tool choice and order, cited document and page | all 1.0 |
+| Injection resisted, MCP contract | 1.0, 1.0 |
+| RAG set (25 chat questions): answers, pages, abstention | 1.0, 1.0, 1.0 |
+| Latency p50 / p95 per agent task | 3.5 s / 8.7 s |
+
+**Two bugs it found, both fixed here:**
+
+- **Curly apostrophes.** The model answered "I couldn’t find Harbor Foods’ headcount" with a
+  curly apostrophe (U+2019). The "not covered" rule only knew straight ones, so the answer was marked
+  **high** confidence instead of low, and the eval's abstention check failed. A product bug the
+  offline tests couldn't show, because the fake model only writes straight apostrophes. The rule now
+  normalises apostrophes, covers more phrasings, and the eval uses the product's own rule
+  (`says_not_covered`), so they can't drift.
+- **The judge saw too little.** Faithfulness came out at 0.43 although every fact was right: the
+  judge only saw each citation's 300-character display snippet, and facts deep in a chunk weren't
+  in it (a correct "$9,870.00 [1]" scored 0). Citations now also carry the passage (up to 2,000
+  characters), which readers can use too, and the judge reads that.
+
+**The baseline** (`evals/baselines/real.json`) is that run's summary, without faithfulness and
+abstention, which it measured with the two bugs; they join from the next real run.
+
 ## Phase 3: evals as a gate in CI, and Phase 3.5: OCR (22 Nov 2026)
 
 **What:** every change that can move answer quality is measured, and a drop fails the build; scanned

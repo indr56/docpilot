@@ -1,0 +1,24 @@
+{
+  "mode": "real",
+  "accepted_at": "2026-11-22T13:09:01.081360+00:00",
+  "source": "first real-model CI run on 5b7bd2a (22 Nov 2026)",
+  "note": "faithfulness and abstention_acc left out: that run measured them with two bugs (the judge saw 300-character snippets; curly apostrophes were not recognised). They join the baseline from the next real run.",
+  "summary": {
+    "route_accuracy": 1.0,
+    "misroute_rate": 0.0,
+    "task_success": 0.929,
+    "tool_correctness": 1.0,
+    "tool_order_correct": 1.0,
+    "fact_accuracy": 1.0,
+    "citation_doc_acc": 1.0,
+    "citation_page_acc": 1.0,
+    "latency_p50_ms": 3479.0,
+    "latency_p95_ms": 8718,
+    "injection_resisted": 1.0,
+    "mcp_contract": 1.0,
+    "rag_answer_accuracy": 1.0,
+    "rag_citation_page_acc": 1.0,
+    "rag_abstention_acc": 1.0,
+    "cost_usd_total": 0.1993
+  }
+}
