@@ -6,6 +6,7 @@
 - `make lint`: ruff + mypy. Must pass.
 - `make smoke`: end-to-end check with the real model (costs ~$0.03)
 - `make eval`: RAG quality eval. Run it after changing prompts, retrieval or models, and compare with the last result.
+- `make eval-offline` / `make eval-real`: the agent, injection, MCP and OCR eval sets plus the gate (specs/evals.md). CI runs offline on every push and real on quality-relevant changes; a new baseline goes in `backend/evals/baselines/` as its own reviewed commit.
 - Hot reload without rebuilding: `make dev-api`, `make dev-worker`, `make dev-ui` (see README §1)
 
 ## Layering rules
@@ -32,6 +33,8 @@
 | Tune retrieval | `services/retrieval.py` and `retrieval_*` / `min_relevance_score` settings, then `make eval` |
 | New agent tool | a `Tool(...)` + `register(...)` in `tools/read_tools.py` or `tools/write_tools.py` (Pydantic args with `description`s; write tools need a `preview`) + add it to the routes or agents that should offer it in `agent/routes.py` (`ROUTE_TOOLS`, `RESEARCH_TASK_TOOLS`, `ACTIONS_TOOLS`; write tools only on Actions) + a fake-agent branch if a route should use it by default + a test in `tests/test_agent.py` |
 | Expose a tool over MCP | add its name to `READ_TOOLS` or `WRITE_TOOLS` in `mcp/service.py` (writes get the confirmation step automatically) + make sure `test_tool_descriptions_pass_the_linter` passes + a test in `tests/test_mcp.py` |
+| New eval case | a case in `backend/evals/sets/<set>.json` (labelled by hand; new sample files go in `scripts/sample_packs.py`) + run `make eval-offline`; if a real-mode metric moves, commit the new baseline separately |
+| New OCR engine | a class with `name` and `read(image) -> OcrResult` in `services/ocr.py`, registered in `ENGINES` + a test |
 | New agent route | `AgentRoute` enum + `agent/routes.py` + `STRATEGY` in `llm/prompts/agent.py` + the router prompt + `llm/fake_agent.py` + a test |
 
 ## Conventions

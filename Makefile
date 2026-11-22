@@ -1,5 +1,5 @@
 # Common tasks. Everything runs in Docker; only `make dev-*` needs local Python/Node.
-.PHONY: help setup up down logs ps test smoke samples lint eval reset dev-api dev-worker dev-ui
+.PHONY: help setup up down logs ps test smoke samples lint eval eval-offline eval-real reset dev-api dev-worker dev-ui
 
 help:            ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[1m%-12s\033[0m %s\n", $$1, $$2}'
@@ -29,6 +29,12 @@ test:            ## Run the test suite in Docker (fake AI, no API key needed)
 
 smoke:           ## End-to-end check against the running stack with the real AI provider
 	docker compose exec api python scripts/smoke_test.py --base-url http://localhost:8000
+
+eval-offline:    ## Agent, injection, MCP and OCR evals on the fake provider, then the gate (free; as in CI)
+	docker compose --profile test run --rm --build tests sh -c "python evals/run_all.py --mode offline --out evals/results/offline.json && python evals/gate.py evals/results/offline.json evals/baselines/offline.json"
+
+eval-real:       ## Every eval set on the real model (OPENAI_API_KEY from .env; about $0.1-0.5), then the gate
+	docker compose --profile test run --rm --build tests sh -c "python evals/run_all.py --mode real --out evals/results/real.json && if [ -f evals/baselines/real.json ]; then python evals/gate.py evals/results/real.json evals/baselines/real.json; fi"
 
 eval:            ## Run the RAG quality evaluation against the running stack
 	docker compose exec api python evals/run_eval.py --base-url http://localhost:8000

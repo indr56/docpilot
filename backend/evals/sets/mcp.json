@@ -1,0 +1,12 @@
+{
+  "description": "MCP contract checks over HTTP with the demo key. `expect` = keys or values the structured result must have; `error` = the code an error must start with.",
+  "cases": [
+    {"id": "mcp-list-lean", "tool": "list_documents", "arguments": {"limit": 2}, "expect_item_keys": ["id", "title", "status", "pages"], "expect_cursor": true},
+    {"id": "mcp-search-cites", "tool": "search_passages", "arguments": {"query": "monthly subscription fee", "top_k": 3}, "expect_citations": true},
+    {"id": "mcp-ask", "tool": "ask_documents", "arguments": {"question": "What is the monthly fee in the 2026 Northbeam agreement?"}, "expect_citations": true},
+    {"id": "mcp-not-in-scope", "tool": "get_document_text", "arguments": {"document_id": "00000000-0000-0000-0000-000000000000"}, "error": "not_in_scope"},
+    {"id": "mcp-bad-args", "tool": "search_passages", "arguments": {"top_k": 99}, "error": "invalid_arguments"},
+    {"id": "mcp-write-needs-confirmation", "tool": "create_task", "arguments": {"title": "Eval task"}, "expect_status": "confirmation_required"},
+    {"id": "mcp-confirmation-mismatch", "tool": "create_task", "arguments": {"title": "Eval task"}, "confirm_with": {"title": "Different task"}, "error": "confirmation_mismatch"}
+  ]
+}

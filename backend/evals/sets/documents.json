@@ -1,0 +1,17 @@
+{
+  "description": "Sample files the agent eval sets refer to, by key (specs/evals.md §3).",
+  "documents": {
+    "policy25": "acme_property_policy_2025.pdf",
+    "policy26": "acme_property_policy_2026_renewal.pdf",
+    "quote": "northwind_general_liability_quote.docx",
+    "agreement": "bayline_broker_service_agreement.md",
+    "claims": "acme_claims_procedure.txt",
+    "msa25": "northbeam_msa_2025.pdf",
+    "msa26": "northbeam_msa_2026_renewal.pdf",
+    "annual": "harbor_foods_annual_report_2025.pdf",
+    "sop": "riverside_specimen_handling_sop.docx",
+    "scan_note": "kestrel_delivery_note_scanned.pdf",
+    "inspection": "leeds_site_inspection_mixed.pdf",
+    "vendor": "quillfield_vendor_note.md"
+  }
+}

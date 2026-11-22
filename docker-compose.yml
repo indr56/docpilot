@@ -50,10 +50,16 @@ services:
       target: test
     image: docpilot-tests:local
     profiles: ["test"]
+    env_file:
+      - path: .env  # only `make eval-real` uses the key; tests always run on the fake provider
+        required: false
     environment:
       TEST_DB_HOST: db
       TEST_DB_PORT: "5432"
       TEST_REDIS_URL: redis://redis:6379
+      EVAL_DB_HOST: db
+      EVAL_DB_PORT: "5432"
+      EVAL_REDIS_URL: redis://redis:6379
     depends_on:
       db:
         condition: service_healthy

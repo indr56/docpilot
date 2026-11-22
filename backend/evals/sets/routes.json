@@ -1,0 +1,29 @@
+{
+  "description": "Goal -> the route(s) a correct router may pick. A list means more than one answer is defensible.",
+  "cases": [
+    {"id": "chat-hello", "goal": "Hi, what can you do?", "route": ["chat_only"]},
+    {"id": "chat-thanks", "goal": "Thanks, that's all for now", "route": ["chat_only"]},
+    {"id": "fact-fee", "goal": "What is the monthly fee in the 2026 Northbeam agreement?", "route": ["pointed_fact"]},
+    {"id": "fact-ebitda", "goal": "What was Harbor Foods' adjusted EBITDA in 2025?", "route": ["pointed_fact"]},
+    {"id": "fact-serum", "goal": "How long can serum be stored for repeat testing?", "route": ["pointed_fact"]},
+    {"id": "fact-received", "goal": "Who received the Kestrel delivery?", "route": ["pointed_fact"]},
+    {"id": "fact-deductible", "goal": "What is the flood deductible on the 2026 policy?", "route": ["pointed_fact"]},
+    {"id": "whole-annual", "goal": "Summarise the Harbor Foods annual report", "route": ["whole_document"]},
+    {"id": "whole-sop", "goal": "Give me an overview of the specimen handling SOP", "route": ["whole_document"]},
+    {"id": "whole-msa", "goal": "Explain the Northbeam renewal agreement in plain words", "route": ["whole_document"]},
+    {"id": "list-limits", "goal": "List every time limit in the specimen handling SOP", "route": ["list_everything"]},
+    {"id": "list-risks", "goal": "List all the principal risks Harbor Foods mentions", "route": ["list_everything"]},
+    {"id": "list-notice", "goal": "Find all the notice periods in the 2026 Northbeam agreement", "route": ["list_everything"]},
+    {"id": "cross-msa", "goal": "Compare the 2025 and 2026 Northbeam agreements", "route": ["cross_document"]},
+    {"id": "cross-changed", "goal": "What changed between the 2025 policy and the 2026 renewal?", "route": ["cross_document"]},
+    {"id": "cross-vs", "goal": "Northbeam 2025 vs 2026: how do the liability caps differ?", "route": ["cross_document"]},
+    {"id": "action-task", "goal": "Create a task to give non-renewal notice for the Northbeam agreement", "route": ["action"]},
+    {"id": "action-report", "goal": "Save a report of Harbor Foods' 2026 outlook", "route": ["action"]},
+    {"id": "action-remind", "goal": "Remind me to audit SOP compliance every quarter", "route": ["action"]},
+    {"id": "action-read-then-save", "goal": "Read the inspection report and record a task to fix cold room 3", "route": ["action"]},
+    {"id": "unsure-word", "goal": "Northbeam", "route": ["unsure", "whole_document", "pointed_fact"]},
+    {"id": "unsure-fees", "goal": "fees?", "route": ["unsure", "pointed_fact", "list_everything"]},
+    {"id": "fact-dividend", "goal": "How much is the final dividend per share?", "route": ["pointed_fact"]},
+    {"id": "list-items", "goal": "What items were on the Kestrel delivery note? List them all.", "route": ["list_everything", "pointed_fact"]}
+  ]
+}

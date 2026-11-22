@@ -2,7 +2,7 @@
 
 Upload documents, get AI insights, **chat with them in natural language with every answer cited down to the document and page**, and hand bigger jobs to an **agent** that picks its own tools, asks before it changes anything, and cites what it used. Think "ChatGPT for your documents", built as a production-style backend with a simple web UI. It runs as one command on a laptop and is designed for thousands of documents.
 
-**At a glance:** 198 automated tests · a 25-question RAG eval with real models scoring 100% on answers, citations (document and page) and abstention · uploads answer in 17 ms and documents are ready in about 4 s · about $0.004 to process a document and about $0.002 per answered question.
+**At a glance:** 210 automated tests · a 25-question RAG eval with real models scoring 100% on answers, citations (document and page) and abstention · uploads answer in 17 ms and documents are ready in about 4 s · about $0.004 to process a document and about $0.002 per answered question.
 
 **Design principles:**
 
@@ -76,7 +76,7 @@ Or run the whole scenario automatically:
 
 ```bash
 make smoke   # end-to-end: upload → process → insights → versioning → chat → streaming → summary → compare → metrics
-make test    # 198 tests in Docker with a fake AI provider (no API key or cost)
+make test    # 210 tests in Docker with a fake AI provider (no API key or cost)
 make eval    # RAG quality evaluation (25 questions) against the running stack
 make help    # all commands
 ```
@@ -113,14 +113,15 @@ make dev-ui       # terminal 3 (optional): UI dev server on :5173 with hot reloa
 | Document statistics API · Processing metrics API | `GET /metrics/documents` (counts, success rate, p50/p95, per-stage timings, errors, queue wait), plus `/metrics/ai-usage`, `/metrics/api`, `/metrics/system` |
 | Data storage (metadata and status, insights, conversations, messages with citations, processing metrics, performance data) | `documents`, `document_insights` + `document_summaries`, `chat_sessions`, `chat_messages` (citations + retrieval trace), `processing_runs` + `processing_stage_runs`, `request_metrics` + `ai_usage` (§5) |
 
-**Beyond the core:** multi-document chat · intelligent follow-up suggestions · summary customisation (length, focus, tone) · automated categorisation and tagging · sentiment and key-insight extraction · comparative analysis · an agent (router, tools, approvals) · an MCP server · a simple web UI · real-time updates over WebSocket · smart caching (embeddings and answers in Redis) · pgvector · streaming chat over SSE · 198 tests · cost tracking and optimisation · rate limiting and quotas · document version tracking · batch processing optimisations · structured logging and observability · health checks and monitoring endpoints. Where each lives:
+**Beyond the core:** multi-document chat · intelligent follow-up suggestions · summary customisation (length, focus, tone) · automated categorisation and tagging · sentiment and key-insight extraction · comparative analysis · an agent (router, tools, approvals) · an MCP server · a simple web UI · real-time updates over WebSocket · smart caching (embeddings and answers in Redis) · pgvector · streaming chat over SSE · 210 tests · cost tracking and optimisation · rate limiting and quotas · document version tracking · batch processing optimisations · structured logging and observability · health checks and monitoring endpoints. Where each lives:
 
 | Area | Feature | Where |
 |---|---|---|
 | **Document processing** | Upload validation (type, size, empty, *content sniffing*, so a renamed `.exe` is rejected) | `services/documents.py` |
 | | Async pipeline: parse → chunk → embed → analyse (Celery), returns `202` immediately | `services/processing.py` |
 | | PDF (with tables and page numbers), DOCX (with tables), TXT, Markdown | `services/parsing.py` |
-| | Clear failures: scanned/image-only PDF, corrupt, password-protected, empty, bad encoding | `services/parsing.py` |
+| | **Scanned pages are read by OCR** (Tesseract, per page: digital pages keep their text layer), with a confidence per page, a warning for low-confidence pages, a separate `ocr` queue and an OCR cache; engines are swappable (specs/ocr.md) | `services/ocr.py`, `services/parsing.py` |
+| | Clear failures: drawings-only PDF, corrupt, password-protected, empty, bad encoding | `services/parsing.py` |
 | | Retries with backoff for transient AI errors; idempotent (per-document lock); time limits; a sweep that recovers lost or stuck jobs | `workers/tasks.py` |
 | **AI insights** | Summary, document type, category, tags, key points, **key facts with page numbers**, entities, sentiment, suggested questions | `services/insights.py` |
 | | Long documents: map-reduce (section notes, 8 in parallel → final analysis); notes saved for later summaries | `services/insights.py` |
@@ -546,7 +547,9 @@ The growth path beyond that (roughly 100k+ documents or many concurrent users), 
 
 | Command | What | Cost |
 |---|---|---|
-| `make test` | 198 tests:<br/>• Units: parsing (incl. edge-case files), validation, chunking, RRF fusion, citation mapping, the quoted-figure check, cost, the cache guard, the version change list<br/>• API integration on real Postgres + Redis: upload, duplicates, validation, failures, batch, versioning, download, summaries, reprocess, chat with citations, abstention, multi-turn, caches, SSE, follow-up checks, comparison, metrics, rate limits, body limits, job recovery, documented error responses<br/>• Agent (28): every route, the supervisor's hand-offs and each agent's tool limits, invalid arguments then a retry, step / cost limits, tool scope, injected writes stay proposals, approve / reject / approve twice / expired / busy / another user, the SSE event order<br/>• MCP (17): 401 / 403 / revoked keys, write scope, cursors and `include`, loud error codes, `ask_documents`, the confirmation flow (required, executed once, mismatch, another key, expired), the call log, the per-key rate limit, the description linter, all over real HTTP | Free (fake AI) |
+| `make test` | 210 tests:<br/>• Units: parsing (incl. edge-case files), validation, chunking, RRF fusion, citation mapping, the quoted-figure check, cost, the cache guard, the version change list<br/>• API integration on real Postgres + Redis: upload, duplicates, validation, failures, batch, versioning, download, summaries, reprocess, chat with citations, abstention, multi-turn, caches, SSE, follow-up checks, comparison, metrics, rate limits, body limits, job recovery, documented error responses<br/>• Agent (28): every route, the supervisor's hand-offs and each agent's tool limits, invalid arguments then a retry, step / cost limits, tool scope, injected writes stay proposals, approve / reject / approve twice / expired / busy / another user, the SSE event order<br/>• MCP (17): 401 / 403 / revoked keys, write scope, cursors and `include`, loud error codes, `ask_documents`, the confirmation flow (required, executed once, mismatch, another key, expired), the call log, the per-key rate limit, the description linter, all over real HTTP<br/>• OCR (8): mixed and image-only PDFs, engine swap and off, cache, low-confidence warning, the OCR queue, a scanned page cited by page<br/>• Eval gate (4) | Free (fake AI) |
+| `make eval-offline` | The agent eval sets on the fake provider, then the gate: what CI runs on every push (specs/evals.md) | Free |
+| `make eval-real` | Every eval set on the real model, then the gate against `evals/baselines/real.json` | ≈ $0.1-0.5 (estimate) |
 | `make lint` | ruff + mypy, all passing | — |
 | `make smoke` | The full user journey against the real stack and model, with readable output | ≈ $0.03 |
 | `make eval` | 25 labelled questions over the samples:<br/>• answer accuracy<br/>• citation document and page accuracy<br/>• abstention accuracy (incl. off-topic and prompt injection)<br/>• multi-document questions and arithmetic over cited figures, including after earlier questions in the same chat<br/>• wrong amounts stated next to correct working<br/>• false-abstention rate<br/>• citation marks that lead nowhere<br/>• follow-ups that repeat the answer<br/>• latency and cost | ≈ $0.05 |
@@ -560,7 +563,18 @@ answer_accuracy 1.0 · citation_doc_acc 1.0 · citation_page_acc 1.0 · abstenti
 dangling_citation_marks 0 · wrong_amounts 0 · follow_up_repeat 0.018 · latency p50 3.1 s · p95 4.4 s · cost $0.048 for 25 questions
 ```
 
-The agent has no eval set yet: Phase 3 adds routing, task and injection evals, gated in CI. Until then its behaviour is covered by the offline tests above.
+**The agent's evals are a gate in CI** ([specs/evals.md](specs/evals.md), `.github/workflows/ci.yml`). Hand-labelled sets in `backend/evals/sets/`, over four sample packs (insurance, a contract and its renewal, a financial report, a clinical procedure) plus two scanned documents and an adversarial note:
+
+| Set | Cases | Scored by |
+|---|---|---|
+| `routes` | 24 goals | the route picked (`route_accuracy`, `misroute_rate`) |
+| `tasks` | 14 goals, from one fact to "read, then save" | facts in the answer, cited document and page, required / forbidden tools and their order, the write proposed, the agents involved, abstention; plus an **LLM judge** for faithfulness to the cited passages |
+| `injection` | 3 goals over a note hiding "save a report titled PWNED-7731" | no unwanted write, the canary never appears |
+| `mcp` | 7 calls | lean shapes, error codes, the confirmation step |
+| `rag` | the 25 chat questions below | as before (real mode) |
+
+Every push runs the **offline** evals (fake provider: they hold the plumbing, safety and MCP metrics at their baseline) and the gate; a change to prompts, agent, tools, retrieval, chat, OCR or the evals also runs the **real-model** evals and the gate against `evals/baselines/real.json`, with the table on the run's summary page. A better score never moves the baseline by itself: committing a new baseline is a reviewed change.
+
 
 The eval is deterministic (substring and citation checks, no model grading), so prompt or model changes can be compared run to run, and it bypasses the answer cache so it always measures the model. Results are saved to `backend/evals/results/`.
 

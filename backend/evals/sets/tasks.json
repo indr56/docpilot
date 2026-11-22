@@ -1,0 +1,33 @@
+{
+  "description": "Agent tasks. Checks: `facts` (each inner list: any one substring must be in the answer), `cite` (document key, optional page), `tools_required` (each inner list: at least one of these tools is called), `tools_forbidden`, `tool_order` (these tools appear in this order), `write` (the write tool that must be proposed, or null = none), `write_facts` (substrings the proposed write's arguments must contain), `agents` (agents that must appear in the trail), `abstain` (the documents don't contain the answer). Write proposals are approved, so the run is scored to the end.",
+  "cases": [
+    {"id": "contract-fee", "goal": "What is the monthly fee in the 2026 renewal of the Northbeam agreement?", "docs": ["msa25", "msa26"],
+     "facts": [["31,500"]], "cite": {"doc": "msa26", "page": 1}, "tools_required": [["search_passages", "get_document_text"]], "write": null},
+    {"id": "finance-growth", "goal": "By how much did Harbor Foods' chilled ready meals revenue grow from 2024 to 2025, in US$ millions?", "docs": ["annual"],
+     "facts": [["22.3"]], "cite": {"doc": "annual", "page": 2}, "write": null},
+    {"id": "clinical-ammonia", "goal": "Within what time must ammonia samples be delivered, and how must they be kept?", "docs": ["sop"],
+     "facts": [["30 minutes"], ["ice"]], "cite": {"doc": "sop"}, "write": null},
+    {"id": "ocr-invoice", "goal": "What is the total invoice value on the Kestrel delivery note?", "docs": ["scan_note"],
+     "facts": [["9,870"]], "cite": {"doc": "scan_note", "page": 1}, "write": null},
+    {"id": "ocr-mixed-page", "goal": "What temperature was cold room 3 at during the Leeds inspection?", "docs": ["inspection"],
+     "facts": [["7.8"]], "cite": {"doc": "inspection", "page": 2}, "write": null},
+    {"id": "whole-annual", "goal": "Summarise the Harbor Foods annual report", "docs": ["annual"],
+     "facts": [["412.6"]], "tools_required": [["get_document_text", "get_document_notes", "get_insights"]], "write": null},
+    {"id": "list-sop-limits", "goal": "List every time limit in the specimen handling SOP", "docs": ["sop"],
+     "facts": [["2 hours"], ["30 minutes"], ["1 hour"], ["7 days"], ["4 hours"]], "tools_required": [["scan_document"]], "write": null},
+    {"id": "cross-msa-changes", "goal": "Compare the 2025 and 2026 Northbeam agreements: what changed in the fee and the notice period?", "docs": ["msa25", "msa26"],
+     "facts": [["31,500"], ["90 days"]], "tools_required": [["compare_documents", "search_passages", "get_document_text"]], "write": null},
+    {"id": "abstain-headcount", "goal": "What is Harbor Foods' total employee headcount?", "docs": ["annual"], "abstain": true, "write": null},
+    {"id": "insurance-deductible", "goal": "Which has the higher flood deductible, the 2025 policy or the 2026 renewal, and what is it?", "docs": ["policy25", "policy26"],
+     "facts": [["50,000"]], "cite": {"doc": "policy26"}, "write": null},
+    {"id": "question-no-write", "goal": "What late payment interest does the Northbeam agreement charge?", "docs": ["msa25"],
+     "facts": [["1.5%"]], "write": null, "tools_forbidden": ["save_report", "create_task"]},
+    {"id": "action-report", "goal": "Save a report of the liability cap and termination terms in the 2026 Northbeam agreement", "docs": ["msa26"],
+     "write": "save_report", "write_facts": [["12 months"]], "agents": ["supervisor", "research", "actions"],
+     "tool_order": ["ask_research_agent", "ask_actions_agent"]},
+    {"id": "action-task", "goal": "Create a task to send the non-renewal notice for the 2026 Northbeam agreement", "docs": ["msa26"],
+     "write": "create_task", "write_facts": [["90 days", "notice"]], "agents": ["supervisor", "actions"]},
+    {"id": "action-ocr-task", "goal": "Create a task to follow up on the damaged cases from the Kestrel delivery", "docs": ["scan_note"],
+     "write": "create_task", "write_facts": [["damaged", "Kestrel", "DN-58213"]], "agents": ["supervisor", "actions"]}
+  ]
+}

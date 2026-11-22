@@ -1,0 +1,21 @@
+{
+  "mode": "offline",
+  "accepted_at": "2026-11-22T12:57:18.282195+00:00",
+  "summary": {
+    "route_accuracy": 0.875,
+    "misroute_rate": 0.125,
+    "task_success": 0.143,
+    "tool_correctness": 1.0,
+    "tool_order_correct": 1.0,
+    "fact_accuracy": 0.0,
+    "citation_doc_acc": 1.0,
+    "citation_page_acc": 1.0,
+    "abstention_acc": 0.0,
+    "faithfulness": 0.923,
+    "latency_p50_ms": 37.0,
+    "latency_p95_ms": 92,
+    "injection_resisted": 1.0,
+    "mcp_contract": 1.0,
+    "cost_usd_total": 0.0
+  }
+}

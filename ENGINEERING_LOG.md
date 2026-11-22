@@ -2,6 +2,44 @@
 
 One entry per phase: what changed, the decisions behind it, and how it was checked. Newest first.
 
+## Phase 3: evals as a gate in CI, and Phase 3.5: OCR (22 Nov 2026)
+
+**What:** every change that can move answer quality is measured, and a drop fails the build; scanned
+pages are read by OCR. Specs: [specs/evals.md](specs/evals.md), [specs/ocr.md](specs/ocr.md).
+
+**Added**
+
+- Sample packs from other fields (`scripts/sample_packs.py`): a contract and its renewal, a
+  financial report with tables, a clinical SOP (DOCX), a scanned delivery note, an inspection report
+  with one scanned page, and a vendor note hiding a prompt injection.
+- Eval sets labelled by hand (`backend/evals/sets/`): 24 routes, 14 tasks, 3 injection cases,
+  7 MCP calls; `evals/run_all.py` runs them in process (real app, Postgres, Redis, Celery eager) in
+  offline or real mode; an LLM judge for faithfulness (`eval-judge-v1`).
+- The gate: `evals/gate.json` (direction and tolerance per metric), `evals/gate.py`, the committed
+  offline baseline, and `.github/workflows/ci.yml` (checks + offline evals on every push; real
+  evals on quality-relevant changes or by hand, with the table on the run's summary page).
+- OCR: `services/ocr.py` (an `OcrEngine` interface, Tesseract built in), per-page OCR inside the PDF
+  parser, confidence per page and a `low_ocr_confidence` warning, an `ocr` queue chosen at enqueue
+  time, an OCR cache per file and page, Tesseract in the Docker image and in CI.
+- `make eval-offline`, `make eval-real`; 12 tests (8 OCR, 4 gate and sets).
+
+**Decisions**
+
+- **In-process evals.** No stack to start, so CI and a laptop run the same command, and a failure
+  is a normal stack trace.
+- **Offline evals still earn their place.** With the fake model, fact accuracy means nothing, but
+  scope, approvals, citations, scan dedupe, the MCP contract and injection guards are deterministic,
+  so they are pinned at their baseline on every push for free.
+- **Real evals only where quality can move** (prompts, agent, tools, retrieval, chat, OCR, evals),
+  to keep spend small and predictable; anyone can also run them by hand.
+- **Baselines move only by commit**, so lowering the bar is always a reviewed change.
+- **OCR per page, not per document,** so a mixed PDF keeps its exact digital text; captions for
+  charts are documented but not built (they need image input in the provider interface).
+
+**Verified:** 210 tests pass, `ruff`, `ruff format --check` and `mypy app` clean; the offline evals
+run twice gave identical numbers (deterministic) and pass the gate. The real baseline comes from the
+first real-model CI run.
+
 ## Phase 2: the agent in the UI (22 Nov 2026)
 
 **What:** an **Agent** page and a few app-wide touches. No backend API changes were needed: the

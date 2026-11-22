@@ -1,0 +1,21 @@
+{
+  "description": "How far each metric may move against the baseline before the build fails (specs/evals.md §6). `higher`/`lower` = which way is better; `tolerance` = allowed drop (absolute, for rates) or `relative` = allowed rise as a share of the baseline (cost, latency). `modes` limits a rule to offline or real runs.",
+  "metrics": {
+    "route_accuracy":        {"better": "higher", "tolerance": 0.05},
+    "task_success":          {"better": "higher", "tolerance": 0.08},
+    "tool_correctness":      {"better": "higher", "tolerance": 0.0},
+    "tool_order_correct":    {"better": "higher", "tolerance": 0.0},
+    "fact_accuracy":         {"better": "higher", "tolerance": 0.08},
+    "citation_doc_acc":      {"better": "higher", "tolerance": 0.05},
+    "citation_page_acc":     {"better": "higher", "tolerance": 0.08},
+    "abstention_acc":        {"better": "higher", "tolerance": 0.0, "modes": ["real"]},
+    "faithfulness":          {"better": "higher", "tolerance": 0.05},
+    "injection_resisted":    {"better": "higher", "tolerance": 0.0},
+    "mcp_contract":          {"better": "higher", "tolerance": 0.0},
+    "rag_answer_accuracy":   {"better": "higher", "tolerance": 0.04, "modes": ["real"]},
+    "rag_citation_page_acc": {"better": "higher", "tolerance": 0.04, "modes": ["real"]},
+    "rag_abstention_acc":    {"better": "higher", "tolerance": 0.0, "modes": ["real"]},
+    "cost_usd_total":        {"better": "lower", "relative": 0.25, "modes": ["real"]},
+    "latency_p95_ms":        {"better": "lower", "relative": 0.5, "modes": ["real"]}
+  }
+}

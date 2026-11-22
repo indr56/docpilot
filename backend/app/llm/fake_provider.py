@@ -25,6 +25,7 @@ from app.llm.schemas import (
     Entities,
     FollowUpQuestions,
     InsightsOutput,
+    JudgeVerdict,
     KeyFact,
     RouteDecision,
     ScanItems,
@@ -85,6 +86,9 @@ class FakeProvider:
             value = fake_agent.decide(messages)
         elif response_model is ScanItems:
             value = fake_agent.scan(messages)
+        elif response_model is JudgeVerdict:  # eval only: cited answers count as supported
+            cited = "(no passages cited)" not in text
+            value = JudgeVerdict(supported_claims=1 if cited else 0, unsupported_claims=[], score=1.0 if cited else 0.0)
         elif response_model is InsightsOutput:
             value = self._insights(text)
         elif response_model is SectionNotes:

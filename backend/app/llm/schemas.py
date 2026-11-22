@@ -125,3 +125,11 @@ class ScanItems(BaseModel):
     """Map step of scan_document: every matching item in one section."""
 
     items: list[ScanItem]
+
+
+class JudgeVerdict(BaseModel):
+    """Eval-only (specs/evals.md §5): is every claim in an answer supported by its cited passages?"""
+
+    supported_claims: int = Field(description="Claims in the answer that the cited passages support")
+    unsupported_claims: list[str] = Field(description="Each claim the cited passages do not support, quoted briefly")
+    score: float = Field(description="supported / all claims, 0.0 to 1.0; 1.0 when the answer makes no claims")

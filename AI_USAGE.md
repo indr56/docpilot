@@ -45,7 +45,7 @@ An AI agent writes code fast, so the controls were about making sure that code i
 6. **No regressions:** the full suite runs after every change, in the agent's sandbox and again on my machine.
 7. **Real stack, not only mocks:** each slice was run against Postgres, Redis, the worker and real OpenAI calls.
 8. **Gates before any change is accepted:**
-   - `make test`: 198 tests on a fake AI provider (no key needed, repeatable)
+   - `make test`: 210 tests on a fake AI provider (no key needed, repeatable)
    - `make lint`: ruff and mypy; the UI is type-checked in every Docker build
    - `make smoke`: the full user journey with the real models
    - `make eval`: 25 labelled questions with the real models, including a multi-turn chat
@@ -393,12 +393,14 @@ The off-topic question and the prompt-injection attempt were both stopped before
 | Vector database | pgvector (HNSW) combined with Postgres full-text search | 12 |
 | Streaming chat responses | Answers stream over SSE; follow-ups arrive with the end of the answer | 9 |
 | Real-time updates | Each processing stage and "insights ready / failed" are pushed over a WebSocket, so the UI updates live | README |
-| Comprehensive test coverage | 198 tests on a fake AI provider plus a 25-case eval on the real models | 2, 15 |
+| Comprehensive test coverage | 210 tests on a fake AI provider plus a 25-case eval on the real models | 2, 15 |
 | Cost tracking and optimisation | Every call metered by operation, model and prompt version; cache savings counted; four cost layers | 8, 9 |
 | Rate limiting and quota management | Per-user rate limits and a daily token quota across all of a user's keys | 12 |
 | Document version tracking | Versions feed cache keys, insights and comparisons; comparing versions uses the computed change list | 8, 14 |
 | Batch processing optimisations | Embeddings in batches of 96; long-document map calls 8 at a time; batch upload | 9, 13 |
 | Logging and observability | Each AI call stored with tokens, cost, latency and success; AI metrics on `/metrics/ai-usage` | 9, 12 |
+| Evals as a CI gate | Hand-labelled agent, injection, MCP and OCR sets; an LLM judge for faithfulness; offline on every push, real on quality changes, both gated against a committed baseline | 19 |
+| Scanned documents (OCR) | Per-page Tesseract with confidence and warnings; swappable engines | 19 |
 | AI agent | A router picks one of 7 strategies; a Supervisor hands reading to a Research agent and saving to an Actions agent; a hand-written loop calls tools with schema-checked arguments; every write waits for an idempotent approval; the same tools are an MCP server with scoped keys and server-side confirmation | 18 |
 
 ### 18. The agent: prompts and safeguards
@@ -414,3 +416,11 @@ The full design is in [specs/agent.md](specs/agent.md). What matters for the AI 
 - **Three roles, one template.** The Supervisor can only hand off; Research can only read; Actions can only list documents and write, with approval. The tool lists are enforced by the code (`invalid_call` otherwise), so a confused model can't, say, have Research write a report. Questions skip the Supervisor, so the multi-agent cost is paid only by actions.
 - **MCP: the model is the client.** The MCP server exposes the same tools to someone else's model, so the tool descriptions are part of the product: a test lints each one (length, says what it returns, every argument described, write tools explain the confirmation step). On its first run it caught three registry descriptions that didn't say what the tool returns. Writes are confirmed on the server with a single-use id bound to the arguments, because a client-side "are you sure?" can be skipped by a model that simply calls twice.
 - **Not measured yet.** The agent has no labelled eval; Phase 3 adds routing, task, hand-off and injection sets and a CI gate. Its prompts are versioned now so those runs can be compared.
+
+### 19. Evals as a CI gate, and OCR
+
+- **What the gate holds** (specs/evals.md): routing accuracy, task success (every check of a task must pass), tool correctness and order, citation document and page, abstention, injection resistance, the MCP contract, and **faithfulness from an LLM judge** (`eval-judge-v1`): the judge sees only the answer and the passages it cites, splits the answer into claims and scores the share the passages support. It measures grounding, not correctness, so the task checks also test the facts directly; it can't see an unsupported claim that carries no citation, which the fact checks and `citation_*` metrics cover.
+- **Two modes.** Offline (fake provider) on every push: deterministic, free, and it pins the plumbing (scope, approvals, citations, MCP shapes, injection guards) to 1.0. Real on changes that can move quality: the same sets, gated against `baselines/real.json` with tolerances (for example task success may drop 0.08, injection and MCP never).
+- **Labelled by hand, on documents from several fields**, so a prompt tuned on insurance wording can't pass by accident; the adversarial note checks that a hidden instruction never becomes a write or leaks.
+- **OCR** (specs/ocr.md) runs only on pages without a text layer, keeps a confidence per page and warns on low ones; the eval set has questions answerable only from scanned pages, cited to the right page.
+- **Baseline status:** the offline baseline is committed; the real baseline is set by the first real-model run in CI and committed as its own change.
