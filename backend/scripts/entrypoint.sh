@@ -10,7 +10,7 @@ case "$1" in
   worker)
     # -B runs the beat scheduler in-process (heartbeat + stale-job requeue). With several worker
     # replicas, run beat as its own single service instead.
-    exec celery -A app.workers.celery_app worker -B -Q documents,analysis,celery \
+    exec celery -A app.workers.celery_app worker -B -Q documents,ocr,analysis,celery \
       --concurrency "${WORKER_CONCURRENCY:-2}" --loglevel INFO -s /tmp/celerybeat-schedule
     ;;
   *)

@@ -18,6 +18,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table
+from sample_packs import build_packs
 
 OUT = Path(__file__).resolve().parents[2] / "samples"
 styles = getSampleStyleSheet()
@@ -217,6 +218,7 @@ def main() -> None:
     build_scanned_pdf(edge / "scanned_no_text.pdf")
     (edge / "corrupt.pdf").write_bytes(b"%PDF-1.7\n" + b"\x00garbage" * 200)
     (edge / "not_really_a.pdf").write_bytes(b"MZ\x90\x00 this is an executable renamed to .pdf")
+    build_packs(OUT)  # contract, finance, clinical, scanned and adversarial packs (scripts/sample_packs.py)
     print(f"Samples written to {OUT}")
 
 

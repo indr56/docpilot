@@ -112,8 +112,31 @@ def _send(kind: str, task, item_id: uuid.UUID | str) -> None:  # type: ignore[no
         raise
 
 
+def _needs_ocr(document_id: uuid.UUID | str) -> bool:
+    """A PDF with pages that have no text layer goes to the `ocr` queue (specs/ocr.md)."""
+    from app.services.ocr import get_ocr_engine, pdf_needs_ocr
+    from app.services.storage import get_storage
+
+    if get_ocr_engine() is None:
+        return False
+    with sync_session() as db:
+        document = db.get(Document, uuid.UUID(str(document_id)))
+        if document is None or document.extension != ".pdf":
+            return False
+        path = get_storage().path(document.storage_path)
+    return pdf_needs_ocr(path, get_settings().ocr_max_pages)
+
+
 def enqueue_document(document_id: uuid.UUID | str) -> None:
     """Raises if the broker is unavailable (callers decide whether that is fatal)."""
+    if _needs_ocr(document_id):
+        mark_enqueued("document", document_id)
+        try:
+            process_document.apply_async((str(document_id),), queue="ocr")
+        except Exception:
+            clear_enqueued("document", document_id)
+            raise
+        return
     _send("document", process_document, document_id)
 
 

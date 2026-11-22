@@ -17,6 +17,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TIKTOKEN_CACHE_DIR=/opt/tiktoken
 WORKDIR /app
 
+# Tesseract for scanned PDF pages (specs/ocr.md).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend/requirements.txt ./
 RUN pip install -r requirements.txt \
     # Pre-download the tokenizer so containers never need network access to start processing.

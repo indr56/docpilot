@@ -9,11 +9,16 @@ from docx import Document as DocxDocument
 from docx.table import Table as DocxTable
 from pdfminer.pdfdocument import PDFPasswordIncorrect
 
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class Page:
     number: int | None  # None for formats without real pages (docx, txt, md)
     text: str
+    ocr_confidence: float | None = None  # set when the text came from OCR (a scanned page)
 
 
 @dataclass
@@ -22,6 +27,11 @@ class ParsedDocument:
     # PDF pages that had no extractable text (e.g. scanned pages inside an otherwise digital PDF).
     # They are left out of `pages`, so the document is still searchable, but the user is warned.
     pages_without_text: list[int] = field(default_factory=list)
+
+    @property
+    def ocr_pages(self) -> dict[int, float]:
+        """Page number -> OCR confidence, for pages read by OCR."""
+        return {p.number: p.ocr_confidence for p in self.pages if p.number and p.ocr_confidence is not None}
 
     @property
     def page_count(self) -> int | None:
@@ -115,15 +125,48 @@ def _pdf_page_text(page) -> str:  # type: ignore[no-untyped-def]
     return "\n\n".join(part for part in parts if part.strip())
 
 
+def _ocr_page(page, number: int, path: Path, state: dict) -> Page | None:  # type: ignore[no-untyped-def,type-arg]
+    """OCR one page that has no text layer (specs/ocr.md). Cached per file content, page, engine, dpi."""
+    from app.core.config import get_settings
+    from app.services import cache, ocr
+
+    engine = ocr.get_ocr_engine()
+    settings = get_settings()
+    if engine is None or state["ocr_count"] >= settings.ocr_max_pages:
+        return None
+    state["ocr_count"] += 1
+    if "digest" not in state:
+        state["digest"] = ocr.file_digest(path)
+    key = ocr.cache_key(engine, state["digest"], number, settings.ocr_dpi)
+    hit = cache.get_json(key)
+    if hit is not None:
+        result = ocr.OcrResult(hit["text"], hit["confidence"])
+    else:
+        try:
+            image = page.to_image(resolution=settings.ocr_dpi).original.convert("L")
+            result = engine.read(image)
+        except Exception:
+            logger.warning("ocr_page_failed", page=number, exc_info=True)
+            return None
+        cache.set_json(key, {"text": result.text, "confidence": result.confidence}, settings.ocr_cache_ttl_seconds)
+    text = _clean(result.text)
+    if len(text) < MIN_TEXT_CHARS:
+        return None
+    return Page(number=number, text=text, ocr_confidence=result.confidence)
+
+
 def _parse_pdf(path: Path) -> ParsedDocument:
     pages: list[Page] = []
     empty: list[int] = []
+    state: dict = {"ocr_count": 0}  # type: ignore[type-arg]
     try:
         with pdfplumber.open(path) as pdf:
             for i, page in enumerate(pdf.pages, start=1):
                 text = _clean(_pdf_page_text(page))
                 if text:
                     pages.append(Page(number=i, text=text))
+                elif scanned := _ocr_page(page, i, path, state):
+                    pages.append(scanned)
                 else:
                     empty.append(i)
     except PDFPasswordIncorrect as exc:
@@ -136,7 +179,7 @@ def _parse_pdf(path: Path) -> ParsedDocument:
     if (pages or empty) and sum(len(p.text) for p in pages) < MIN_TEXT_CHARS:
         raise ParseError(
             "no_extractable_text",
-            "No text could be extracted. The PDF looks scanned (image-only); OCR is not supported yet.",
+            "No text could be extracted, even with OCR. The pages may be blank, drawings only, or too faint to read.",
         )
     return ParsedDocument(pages=pages, pages_without_text=empty)
 

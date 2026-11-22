@@ -194,6 +194,15 @@ def _document_gone(db: Session, document_id: uuid.UUID) -> bool:
     return db.query(Document.id).filter(Document.id == document_id).first() is None
 
 
+def _low_ocr_confidence_warning(pages: list[int]) -> dict[str, str]:
+    listed = ", ".join(map(str, pages))
+    return {
+        "code": "low_ocr_confidence",
+        "message": f"Page{'s' if len(pages) > 1 else ''} {listed} were read by OCR with low confidence: "
+        "check figures from them against the original.",
+    }
+
+
 def _pages_without_text_warning(pages: list[int]) -> dict[str, str]:
     listed = ", ".join(str(p) for p in pages)
     if len(pages) == 1:
@@ -237,6 +246,11 @@ def _process(db: Session, document: Document, *, task_id: str | None, is_final_a
             if parsed.pages_without_text:
                 details["pages_without_text"] = parsed.pages_without_text
                 document.warnings = [_pages_without_text_warning(parsed.pages_without_text)]
+            if parsed.ocr_pages:
+                details["ocr_pages"] = parsed.ocr_pages  # page -> confidence (specs/ocr.md)
+                low = sorted(p for p, c in parsed.ocr_pages.items() if c < settings.ocr_min_confidence)
+                if low:
+                    document.warnings = [*document.warnings, _low_ocr_confidence_warning(low)]
 
         with recorder.stage(ProcessingStage.CHUNK) as details:
             chunks = chunk_document(parsed, settings.chunk_size_tokens, settings.chunk_overlap_tokens)

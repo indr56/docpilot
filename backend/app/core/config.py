@@ -57,6 +57,15 @@ class Settings(BaseSettings):
     job_soft_time_limit_seconds: int = 600
     job_hard_time_limit_seconds: int = 720
 
+    # --- OCR for scanned PDF pages (specs/ocr.md) ---
+    ocr_engine: str = "tesseract"  # "tesseract" or "none"; cloud engines register in services/ocr.py
+    ocr_languages: str = "eng"
+    ocr_dpi: int = 300
+    ocr_min_confidence: float = 0.6  # pages below this are listed in a low_ocr_confidence warning
+    ocr_max_pages: int = 50  # per document
+    ocr_page_timeout_seconds: int = 30
+    ocr_cache_ttl_seconds: int = 30 * 24 * 3600
+
     # --- Retrieval / chat ---
     retrieval_top_k: int = 6
     retrieval_candidates: int = 24
