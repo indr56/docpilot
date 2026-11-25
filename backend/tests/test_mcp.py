@@ -147,9 +147,13 @@ async def test_write_needs_a_confirmation_and_runs_once(client: httpx.AsyncClien
     before = [o for o in (await client.get("/agent/outputs?kind=task")).json() if o["title"] == "Renewal call"]
     assert before == []  # nothing written yet
 
-    ok, done = await call(mcp, "docpilot-demo-key", "create_task", {**args, "confirmation_id": first["confirmation_id"]})
+    ok, done = await call(
+        mcp, "docpilot-demo-key", "create_task", {**args, "confirmation_id": first["confirmation_id"]}
+    )
     assert ok and done["status"] == "executed"
-    ok, again = await call(mcp, "docpilot-demo-key", "create_task", {**args, "confirmation_id": first["confirmation_id"]})
+    ok, again = await call(
+        mcp, "docpilot-demo-key", "create_task", {**args, "confirmation_id": first["confirmation_id"]}
+    )
     assert ok and again["status"] == "already_executed" and again["result"] == done["result"]
     saved = [o for o in (await client.get("/agent/outputs?kind=task")).json() if o["title"] == "Renewal call"]
     assert len(saved) == 1 and saved[0]["run_id"] is None
@@ -183,7 +187,9 @@ async def test_expired_confirmation_is_refused(mcp: httpx.AsyncClient) -> None:
             .values(expires_at=utcnow() - timedelta(seconds=1))
         )
         await db.commit()
-    ok, error = await call(mcp, "docpilot-demo-key", "save_report", {**args, "confirmation_id": first["confirmation_id"]})
+    ok, error = await call(
+        mcp, "docpilot-demo-key", "save_report", {**args, "confirmation_id": first["confirmation_id"]}
+    )
     assert not ok and error.startswith("confirmation_expired:")
 
 

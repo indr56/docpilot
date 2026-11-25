@@ -45,7 +45,7 @@ An AI agent writes code fast, so the controls were about making sure that code i
 6. **No regressions:** the full suite runs after every change, in the agent's sandbox and again on my machine.
 7. **Real stack, not only mocks:** each slice was run against Postgres, Redis, the worker and real OpenAI calls.
 8. **Gates before any change is accepted:**
-   - `make test`: 210 tests on a fake AI provider (no key needed, repeatable)
+   - `make test`: 212 tests on a fake AI provider (no key needed, repeatable)
    - `make lint`: ruff and mypy; the UI is type-checked in every Docker build
    - `make smoke`: the full user journey with the real models
    - `make eval`: 25 labelled questions with the real models, including a multi-turn chat
@@ -393,7 +393,7 @@ The off-topic question and the prompt-injection attempt were both stopped before
 | Vector database | pgvector (HNSW) combined with Postgres full-text search | 12 |
 | Streaming chat responses | Answers stream over SSE; follow-ups arrive with the end of the answer | 9 |
 | Real-time updates | Each processing stage and "insights ready / failed" are pushed over a WebSocket, so the UI updates live | README |
-| Comprehensive test coverage | 210 tests on a fake AI provider plus a 25-case eval on the real models | 2, 15 |
+| Comprehensive test coverage | 212 tests on a fake AI provider plus a 25-case eval on the real models | 2, 15 |
 | Cost tracking and optimisation | Every call metered by operation, model and prompt version; cache savings counted; four cost layers | 8, 9 |
 | Rate limiting and quota management | Per-user rate limits and a daily token quota across all of a user's keys | 12 |
 | Document version tracking | Versions feed cache keys, insights and comparisons; comparing versions uses the computed change list | 8, 14 |
