@@ -20,7 +20,7 @@ make up            # → UI on http://localhost:9700 · API docs on http://local
 
 ![Chat with citations](docs/screenshots/chat.png)
 
-More screenshots: [the agent, with its approval step](docs/screenshots/agent.png) (offline demo mode) · [documents and insights](docs/screenshots/documents.png) · [comparison](docs/screenshots/compare.png) · [monitoring](docs/screenshots/monitoring.png)
+More screenshots: [the agent, waiting for approval](docs/screenshots/agent.png) · [documents and insights](docs/screenshots/documents.png) · [comparison](docs/screenshots/compare.png) · [monitoring](docs/screenshots/monitoring.png)
 
 ---
 
