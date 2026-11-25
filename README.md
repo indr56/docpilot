@@ -47,10 +47,10 @@ More screenshots: [the agent, waiting for approval](docs/screenshots/agent.png) 
 **Prerequisites:** Docker Desktop (or Docker Engine with Compose v2) and an OpenAI API key.
 
 ```bash
-git clone <this repo> && cd docpilot
+git clone https://github.com/indr56/docpilot.git && cd docpilot
 make setup                 # creates .env from .env.example
 # edit .env and set OPENAI_API_KEY=sk-...
-make up                    # builds and starts db, redis, api (+UI) and worker; waits until healthy
+make up                    # builds and starts db, redis, api (+UI) and worker; waits until healthy (first build ~2 min)
 ```
 
 | What | Where |
@@ -71,6 +71,9 @@ There's no `make`? Use `cp .env.example .env` then `docker compose up --build -d
 4. Chat with the policy, the quote and the agreement: *"What is the flood deductible, and how long do we have to report a loss?"*, then *"And for earthquake?"*, then *"Who is the CEO?"* (it says it can't find it).
 5. Compare v2 with v1, focus *what changed at renewal*.
 6. Open Monitoring: processing times, AI cost by operation, cache savings, API latency.
+7. Upload `kestrel_delivery_note_scanned.pdf` (an image-only scan): OCR reads it, and chat answers from it with the page cited.
+8. Open **Agent**, pick *Save a report of the termination terms*: watch the supervisor hand off to Research and then Actions, then **Approve** (it saves) or **Reject** (nothing is written).
+9. Connect Claude or Cursor to the MCP server (§7) and ask about your documents from there.
 
 Or run the whole scenario automatically:
 
@@ -81,7 +84,7 @@ make eval    # RAG quality evaluation (25 questions) against the running stack
 make help    # all commands
 ```
 
-**Ports** (all configurable in `.env`): API/UI `9700`, Postgres `9701`, Redis `9702`.
+**Ports** (all configurable in `.env`, or for one run: `API_PORT=9800 make up`): API/UI `9700`, Postgres `9701`, Redis `9702`.
 **Stop:** `make down` (keeps data) · `make reset` (deletes data).
 
 <details>

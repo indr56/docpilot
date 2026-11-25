@@ -1,4 +1,8 @@
 # Common tasks. Everything runs in Docker; only `make dev-*` needs local Python/Node.
+
+# Read API_PORT (and the rest) from .env when it is there, so a port set in .env is the one we wait on.
+-include .env
+API_PORT ?= 9700
 .PHONY: help setup up down logs ps test smoke samples lint eval eval-offline eval-real reset dev-api dev-worker dev-ui
 
 help:            ## Show this help
@@ -9,8 +13,8 @@ setup:           ## Create .env from the template (then add OPENAI_API_KEY)
 
 up: setup        ## Build and start everything -> http://localhost:9700
 	docker compose up --build -d
-	@echo "Waiting for the API..." && until curl -sf http://localhost:$${API_PORT:-9700}/health >/dev/null; do sleep 2; done
-	@echo "\n  UI:       http://localhost:$${API_PORT:-9700}\n  API docs: http://localhost:$${API_PORT:-9700}/docs\n  API key:  docpilot-demo-key\n"
+	@echo "Waiting for the API..." && until curl -sf http://localhost:$(API_PORT)/health >/dev/null; do sleep 2; done
+	@echo "\n  UI:       http://localhost:$(API_PORT)\n  API docs: http://localhost:$(API_PORT)/docs\n  API key:  docpilot-demo-key\n"
 
 down:            ## Stop containers (data is kept)
 	docker compose down
